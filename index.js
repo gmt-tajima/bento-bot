@@ -38,6 +38,11 @@ let deadlineTime = null;
 let deadlineCheck = "ON";
 
 // ===============================
+// 許可リアクション（ここが重要）
+// ===============================
+const ALLOWED_REACTIONS = ["🍱", "🍚", "❌"];
+
+// ===============================
 // 日付フォーマット
 // ===============================
 function getTodayDateString() {
@@ -90,7 +95,6 @@ async function initializeTodayMessage() {
     });
     const client = await auth.getClient();
 
-    // 投稿ログから今日の投稿IDを取得
     const postLog = await sheets.spreadsheets.values.get({
       auth: client,
       spreadsheetId: process.env.SHEET_ID,
@@ -111,7 +115,6 @@ async function initializeTodayMessage() {
 
     console.log("今日の投稿ID:", todayMessageId);
 
-    // 設定シートから締切情報を取得
     const settings = await sheets.spreadsheets.values.get({
       auth: client,
       spreadsheetId: process.env.SHEET_ID,
@@ -120,8 +123,8 @@ async function initializeTodayMessage() {
 
     const v = settings.data.values.map(r => r[0]);
 
-    deadlineTime = v[2];   // 締切固定モード
-    deadlineCheck = v[4];  // 締切チェック ON/OFF
+    deadlineTime = v[2];
+    deadlineCheck = v[4];
 
     console.log("締切時刻:", deadlineTime);
     console.log("締切チェック:", deadlineCheck);
@@ -141,10 +144,21 @@ async function handleReactionAdd(reaction, user) {
     if (reaction.partial) await reaction.fetch();
     if (reaction.message.partial) await reaction.message.fetch();
 
+    // 今日の投稿以外は無視
     if (reaction.message.id !== todayMessageId) return;
 
     const emoji = reaction.emoji.name;
-    if (emoji !== "🍱" && emoji !== "🍚") return;
+
+    // ============================
+    // ★ 許可されていないリアクションは即削除
+    // ============================
+    if (!ALLOWED_REACTIONS.includes(emoji)) {
+      await reaction.users.remove(user.id);
+      return;
+    }
+
+    // ❌ はキャンセル扱いにしない（削除イベントで処理する）
+    if (emoji === "❌") return;
 
     // 締切チェック
     if (deadlineCheck === "ON" && isAfterDeadline()) {
@@ -186,26 +200,45 @@ async function handleReactionRemove(reaction, user) {
     if (reaction.message.id !== todayMessageId) return;
 
     const emoji = reaction.emoji.name;
-    if (emoji !== "🍱" && emoji !== "🍚") return;
 
-    // 締切チェック
-    if (deadlineCheck === "ON" && isAfterDeadline()) {
-      await reaction.message.react(emoji);
-      await user.send("締切後のためキャンセルできません");
+    // ❌ の削除はキャンセル扱い
+    if (emoji === "❌") {
+      const member = await findMember(user.id);
+      if (!member) return;
+
+      await writeReactionLog({
+        discordId: user.id,
+        name: member.name,
+        internalId: member.internalId,
+        place: member.place,
+        type: "❌",
+        status: "キャンセル"
+      });
+
       return;
     }
 
-    const member = await findMember(user.id);
-    if (!member) return;
+    // 🍱 🍚 の削除（通常キャンセル）
+    if (emoji === "🍱" || emoji === "🍚") {
 
-    await writeReactionLog({
-      discordId: user.id,
-      name: member.name,
-      internalId: member.internalId,
-      place: member.place,
-      type: emoji,
-      status: "キャンセル"
-    });
+      if (deadlineCheck === "ON" && isAfterDeadline()) {
+        await reaction.message.react(emoji);
+        await user.send("締切後のためキャンセルできません");
+        return;
+      }
+
+      const member = await findMember(user.id);
+      if (!member) return;
+
+      await writeReactionLog({
+        discordId: user.id,
+        name: member.name,
+        internalId: member.internalId,
+        place: member.place,
+        type: emoji,
+        status: "キャンセル"
+      });
+    }
 
   } catch (err) {
     console.error("handleReactionRemove エラー:", err);
