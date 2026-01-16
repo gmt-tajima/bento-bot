@@ -76,6 +76,25 @@ client.on("messageReactionRemove", async (reaction, user) => {
 });
 
 // ===============================
+// Discord 接続状態のログ（切断原因の特定用）
+// ===============================
+client.on("error", (err) => {
+  console.error("Discord クライアントエラー:", err);
+});
+
+client.on("shardDisconnect", (event, id) => {
+  console.log(`Shard ${id} disconnected`, event);
+});
+
+client.on("shardReconnecting", (id) => {
+  console.log(`Shard ${id} reconnecting`);
+});
+
+client.on("shardResume", (id, replayed) => {
+  console.log(`Shard ${id} resumed. Replayed events: ${replayed}`);
+});
+
+// ===============================
 // ⑦ Bot ログイン
 // ===============================
 client.login(process.env.DISCORD_TOKEN);
