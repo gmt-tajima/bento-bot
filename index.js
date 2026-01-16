@@ -396,7 +396,7 @@ async function findMember(discordId) {
 }
 
 // ===============================
-// リアクションログ書き込み
+// リアクションログ書き込み（JST対応版）
 // ===============================
 async function writeReactionLog(data) {
   try {
@@ -406,10 +406,31 @@ async function writeReactionLog(data) {
     });
     const client = await auth.getClient();
 
+    // ===== JST のリアクション時間 =====
     const now = new Date();
-    const time = now.toTimeString().slice(0, 5);
+    now.setHours(now.getHours() + 9); // JST へ変換
+    const reactionTime = now.toTimeString().slice(0, 5); // HH:MM
+
     const today = getTodayDateString();
 
+    // ===== 投稿メッセージの JST 時刻を取得 =====
+    let postTimeStr = "";
+    try {
+      const channel = await client.channels.fetch(process.env.CHANNEL_ID);
+      const message = await channel.messages.fetch(todayMessageId);
+
+      const postTime = new Date(message.createdTimestamp);
+      postTime.setHours(postTime.getHours() + 9); // JST へ変換
+
+      const h = postTime.getHours();
+      const m = ("0" + postTime.getMinutes()).slice(-2);
+      postTimeStr = `${h}:${m}`;
+    } catch (err) {
+      console.error("投稿時刻の取得に失敗:", err);
+      postTimeStr = "取得失敗";
+    }
+
+    // ===== A:J の行データ =====
     const row = [
       today,
       data.discordId,
@@ -418,9 +439,9 @@ async function writeReactionLog(data) {
       data.place,
       data.type,
       data.status,
-      time,
-      todayMessageId,
-      deadlineTime
+      reactionTime,     // H列：リアクション時間（JST）
+      todayMessageId,   // I列：投稿ID
+      postTimeStr       // J列：投稿時刻（JST）
     ];
 
     await sheets.spreadsheets.values.append({
