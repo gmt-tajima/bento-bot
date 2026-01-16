@@ -164,8 +164,8 @@ async function initializeTodayMessage() {
     console.error("initializeTodayMessage エラー:", err);
   }
 }
-// ===============================
-// ★③ 最新投稿から今日の投稿IDを取得
+　// ===============================
+// ★③ 最新投稿から今日の投稿IDを取得（年入りタイトル対応版）
 // ===============================
 async function fetchTodayMessageFromChannel() {
   try {
@@ -182,21 +182,37 @@ async function fetchTodayMessageFromChannel() {
       return;
     }
 
-    const today = getTodayDateString();
-    const month = today.split("/")[1];
-    const day = today.split("/")[2];
+    const today = getTodayDateString(); // 2026/01/16
+    const [year, month, day] = today.split("/");
+
+    // 判定キーを複数用意（GAS のタイトル揺れに対応）
+    const key1 = `${parseInt(year)}年${parseInt(month)}月${parseInt(day)}日`; // 2026年1月16日
+    const key2 = `${String(year).slice(-2)}年${month}${day}日`;              // 26年01月16日
+    const key3 = `${parseInt(month)}月${parseInt(day)}日`;                   // 1月16日（旧形式）
 
     const embed = latest.embeds[0];
-    if (!embed || !embed.title.includes(`${parseInt(month)}月${parseInt(day)}日`)) {
-      console.log("最新メッセージは今日の投稿ではありません");
+    const title = embed?.title || "";
+
+    // どれか1つでも含まれていれば「今日の投稿」と判定
+    const isTodayPost =
+      title.includes(key1) ||
+      title.includes(key2) ||
+      title.includes(key3);
+
+    if (!isTodayPost) {
+      console.log(`今日の投稿ではありません（タイトル不一致） title="${title}"`);
+      console.log(`期待キー: ${key1} / ${key2} / ${key3}`);
       return;
     }
 
+    // 今日の投稿IDをセット
     todayMessageId = latest.id;
     console.log("最新投稿から取得した投稿ID:", todayMessageId);
 
+    // 投稿ログへ書き込み
     await writeTodayMessageIdToSheet(todayMessageId);
 
+    // Bot がリアクションを付ける
     await latest.react("🍱");
     await latest.react("🍚");
     await latest.react("❌");
@@ -215,7 +231,7 @@ async function writeTodayMessageIdToSheet(messageId) {
       credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT),
       scopes: ["https://www.googleapis.com/auth/spreadsheets"]
     });
-    const sheetsClient = await auth.getClient();   // ← 修正済み
+    const sheetsClient = await auth.getClient();
 
     const today = getTodayDateString();
 
@@ -257,8 +273,12 @@ async function handleReactionAdd(reaction, user) {
   try {
     if (user.bot) return;
 
-    if (reaction.partial) await reaction.fetch();
-    if (reaction.message.partial) await reaction.message.fetch();
+    if (reaction.partial) {
+      try { await reaction.fetch(); } catch {}
+    }
+    if (reaction.message.partial) {
+      try { await reaction.message.fetch(); } catch {}
+    }
 
     if (reaction.message.id !== todayMessageId) return;
 
