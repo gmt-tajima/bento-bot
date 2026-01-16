@@ -38,7 +38,7 @@ let deadlineTime = null;
 let deadlineCheck = "ON";
 
 // ===============================
-// 許可リアクション（ここが重要）
+// 許可リアクション
 // ===============================
 const ALLOWED_REACTIONS = ["🍱", "🍚", "❌"];
 
@@ -59,6 +59,7 @@ function getTodayDateString() {
 client.once("ready", () => {
   console.log(`Bot 起動: ${client.user.tag}`);
   initializeTodayMessage();
+  fetchTodayMessageFromChannel();   // ← ★追加：最新投稿から投稿IDを取得
 });
 
 // ===============================
@@ -76,7 +77,7 @@ client.on("messageReactionRemove", async (reaction, user) => {
 });
 
 // ===============================
-// Discord 接続状態のログ（切断原因の特定用）
+// Discord 接続状態ログ（①）
 // ===============================
 client.on("error", (err) => {
   console.error("Discord クライアントエラー:", err);
@@ -100,7 +101,7 @@ client.on("shardResume", (id, replayed) => {
 client.login(process.env.DISCORD_TOKEN);
 
 // ===============================
-// Node.js 側のクラッシュ検知ログ
+// Node.js クラッシュ検知（②）
 // ===============================
 process.on("unhandledRejection", (reason, promise) => {
   console.error("Unhandled Rejection at:", promise, "reason:", reason);
@@ -109,7 +110,6 @@ process.on("unhandledRejection", (reason, promise) => {
 process.on("uncaughtException", (err) => {
   console.error("Uncaught Exception:", err);
 });
-
 
 // =======================================================
 // ここから下が 6つの関数（Render版）
@@ -166,6 +166,74 @@ async function initializeTodayMessage() {
 }
 
 // ===============================
+// ★③ 最新投稿から今日の投稿IDを取得
+// ===============================
+async function fetchTodayMessageFromChannel() {
+  try {
+    const channel = await client.channels.fetch("1413402712258904145");
+    if (!channel) {
+      console.error("チャンネルが見つかりません");
+      return;
+    }
+
+    const messages = await channel.messages.fetch({ limit: 1 });
+    const latest = messages.first();
+    if (!latest) {
+      console.log("最新メッセージが取得できませんでした");
+      return;
+    }
+
+    const today = getTodayDateString();
+    const month = today.split("/")[1];
+    const day = today.split("/")[2];
+
+    const embed = latest.embeds[0];
+    if (!embed || !embed.title.includes(`${parseInt(month)}月${parseInt(day)}日`)) {
+      console.log("最新メッセージは今日の投稿ではありません");
+      return;
+    }
+
+    todayMessageId = latest.id;
+    console.log("最新投稿から取得した投稿ID:", todayMessageId);
+
+    await writeTodayMessageIdToSheet(todayMessageId);
+
+  } catch (err) {
+    console.error("fetchTodayMessageFromChannel エラー:", err);
+  }
+}
+
+// ===============================
+// ★③ 投稿IDをスプレッドシートに書き込む
+// ===============================
+async function writeTodayMessageIdToSheet(messageId) {
+  try {
+    const auth = new google.auth.GoogleAuth({
+      credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT),
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"]
+    });
+    const client = await auth.getClient();
+
+    const today = getTodayDateString();
+
+    await sheets.spreadsheets.values.append({
+      auth: client,
+      spreadsheetId: process.env.SHEET_ID,
+      range: "投稿ログ!A:C",
+      valueInputOption: "USER_ENTERED",
+      requestBody: {
+        values: [[today, messageId, "Bot自動取得"]]
+      }
+    });
+
+    console.log("投稿IDをスプレッドシートに書き込み:", messageId);
+
+  } catch (err) {
+    console.error("writeTodayMessageIdToSheet エラー:", err);
+  }
+}
+
+// ===============================
 // リアクション追加（注文）
 // ===============================
 async function handleReactionAdd(reaction, user) {
@@ -175,23 +243,17 @@ async function handleReactionAdd(reaction, user) {
     if (reaction.partial) await reaction.fetch();
     if (reaction.message.partial) await reaction.message.fetch();
 
-    // 今日の投稿以外は無視
     if (reaction.message.id !== todayMessageId) return;
 
     const emoji = reaction.emoji.name;
 
-    // ============================
-    // ★ 許可されていないリアクションは即削除
-    // ============================
     if (!ALLOWED_REACTIONS.includes(emoji)) {
       await reaction.users.remove(user.id);
       return;
     }
 
-    // ❌ はキャンセル扱いにしない（削除イベントで処理する）
     if (emoji === "❌") return;
 
-    // 締切チェック
     if (deadlineCheck === "ON" && isAfterDeadline()) {
       await reaction.users.remove(user.id);
       await user.send("締切後のため注文できません");
@@ -232,7 +294,6 @@ async function handleReactionRemove(reaction, user) {
 
     const emoji = reaction.emoji.name;
 
-    // ❌ の削除はキャンセル扱い
     if (emoji === "❌") {
       const member = await findMember(user.id);
       if (!member) return;
@@ -249,7 +310,6 @@ async function handleReactionRemove(reaction, user) {
       return;
     }
 
-    // 🍱 🍚 の削除（通常キャンセル）
     if (emoji === "🍱" || emoji === "🍚") {
 
       if (deadlineCheck === "ON" && isAfterDeadline()) {
