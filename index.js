@@ -198,6 +198,11 @@ async function fetchTodayMessageFromChannel() {
 
     await writeTodayMessageIdToSheet(todayMessageId);
 
+    await latest.react("🍱");
+    await latest.react("🍚");
+    await latest.react("❌");
+
+
   } catch (err) {
     console.error("fetchTodayMessageFromChannel エラー:", err);
   }
