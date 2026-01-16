@@ -303,51 +303,36 @@ async function handleReactionRemove(reaction, user) {
   try {
     if (user.bot) return;
 
-    if (reaction.partial) await reaction.fetch();
-    if (reaction.message.partial) await reaction.message.fetch();
+    // partial 対策（安全 fetch）
+    if (reaction.partial) {
+      try { await reaction.fetch(); } catch {}
+    }
+    if (reaction.message.partial) {
+      try { await reaction.message.fetch(); } catch {}
+    }
 
     if (reaction.message.id !== todayMessageId) return;
 
     const emoji = reaction.emoji.name;
 
-    // ❌ の場合は即キャンセル
-    if (emoji === "❌") {
-      const member = await findMember(user.id);
-      if (!member) return;
-
-      await writeReactionLog({
-        discordId: user.id,
-        name: member.name,
-        internalId: member.internalId,
-        place: member.place,
-        type: "❌",
-        status: "キャンセル"
-      });
-
+    // 締切後はキャンセル不可
+    if (deadlineCheck === "ON" && isAfterDeadline()) {
+      await reaction.users.remove(user.id);
+      await user.send("締切後のためキャンセルできません");
       return;
     }
 
-    // 🍱 / 🍚 のキャンセル
-    if (emoji === "🍱" || emoji === "🍚") {
+    const member = await findMember(user.id);
+    if (!member) return;
 
-      if (deadlineCheck === "ON" && isAfterDeadline()) {
-        await reaction.message.react(emoji);
-        await user.send("締切後のためキャンセルできません");
-        return;
-      }
-
-      const member = await findMember(user.id);
-      if (!member) return;
-
-      await writeReactionLog({
-        discordId: user.id,
-        name: member.name,
-        internalId: member.internalId,
-        place: member.place,
-        type: emoji,
-        status: "キャンセル"
-      });
-    }
+    await writeReactionLog({
+      discordId: user.id,
+      name: member.name,
+      internalId: member.internalId,
+      place: member.place,
+      type: emoji,
+      status: "キャンセル"
+    });
 
   } catch (err) {
     console.error("handleReactionRemove エラー:", err);
@@ -363,7 +348,7 @@ async function findMember(discordId) {
       credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT),
       scopes: ["https://www.googleapis.com/auth/spreadsheets"]
     });
-    const sheetsClient = await auth.getClient();   // ← 修正済み
+    const sheetsClient = await auth.getClient();
 
     const res = await sheets.spreadsheets.values.get({
       auth: sheetsClient,
@@ -404,11 +389,11 @@ async function writeReactionLog(data) {
       credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT),
       scopes: ["https://www.googleapis.com/auth/spreadsheets"]
     });
-    const sheetsClient = await auth.getClient();   // ← 修正：client を上書きしない
+    const sheetsClient = await auth.getClient();
 
     // ===== JST のリアクション時間 =====
     const now = new Date();
-    now.setHours(now.getHours() + 9); // JST
+    now.setHours(now.getHours() + 9);
     const reactionTime = now.toTimeString().slice(0, 5);
 
     const today = getTodayDateString();
@@ -420,7 +405,7 @@ async function writeReactionLog(data) {
       const message = await channel.messages.fetch(todayMessageId);
 
       const postTime = new Date(message.createdTimestamp);
-      postTime.setHours(postTime.getHours() + 9); // JST
+      postTime.setHours(postTime.getHours() + 9);
 
       const h = postTime.getHours();
       const m = ("0" + postTime.getMinutes()).slice(-2);
@@ -439,9 +424,9 @@ async function writeReactionLog(data) {
       data.place,
       data.type,
       data.status,
-      reactionTime,     // H列：リアクション時間（JST）
-      todayMessageId,   // I列：投稿ID
-      postTimeStr       // J列：投稿時刻（JST）
+      reactionTime,
+      todayMessageId,
+      postTimeStr
     ];
 
     await sheets.spreadsheets.values.append({
