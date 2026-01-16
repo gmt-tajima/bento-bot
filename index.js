@@ -221,6 +221,20 @@ async function writeTodayMessageIdToSheet(messageId) {
 
     const today = getTodayDateString();
 
+    // 投稿ログを取得して重複チェック
+const postLog = await sheets.spreadsheets.values.get({
+  auth: client,
+  spreadsheetId: process.env.SHEET_ID,
+  range: "投稿ログ!A:C"
+});
+
+const rows = postLog.data.values || [];
+const alreadyExists = rows.some(row => row[0] === today && row[1] === messageId);
+if (alreadyExists) {
+  console.log("投稿IDは既に記録済みのため、書き込みをスキップします");
+  return;
+}
+
     await sheets.spreadsheets.values.append({
       auth: client,
       spreadsheetId: process.env.SHEET_ID,
