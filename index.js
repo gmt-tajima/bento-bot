@@ -63,6 +63,52 @@ client.once("ready", () => {
 });
 
 // ===============================
+// ★ 新しいメッセージが投稿された時の処理（GAS対応）
+// ===============================
+client.on("messageCreate", async (message) => {
+  try {
+    // Bot 自身の投稿は無視
+    if (message.author.bot) return;
+
+    // embed が無い投稿は無視（GAS の投稿は必ず embed 付き）
+    if (!message.embeds || message.embeds.length === 0) return;
+
+    const embed = message.embeds[0];
+    const title = embed?.title || "";
+
+    // 今日の日付（BOT の判定ロジックと同じ）
+    const today = getTodayDateString(); // 2026/01/16
+    const [year, month, day] = today.split("/");
+
+    const key1 = `${parseInt(year)}年${parseInt(month)}月${parseInt(day)}日`; // 2026年1月16日
+    const key2 = `${String(year).slice(-2)}年${month}${day}日`;              // 26年01月16日
+    const key3 = `${parseInt(month)}月${parseInt(day)}日`;                   // 1月16日（旧形式）
+
+    const isTodayPost =
+      title.includes(key1) ||
+      title.includes(key2) ||
+      title.includes(key3);
+
+    if (!isTodayPost) return;
+
+    // 今日の投稿として認識
+    todayMessageId = message.id;
+    console.log("messageCreate で今日の投稿を検出:", todayMessageId);
+
+    // 投稿ログに書き込み
+    await writeTodayMessageIdToSheet(todayMessageId);
+
+    // リアクション付与
+    await message.react("🍱");
+    await message.react("🍚");
+    await message.react("❌");
+
+  } catch (err) {
+    console.error("messageCreate エラー:", err);
+  }
+});
+
+// ===============================
 // ⑤ リアクション追加
 // ===============================
 client.on("messageReactionAdd", async (reaction, user) => {
