@@ -59,7 +59,7 @@ function getTodayDateString() {
 client.once("ready", () => {
   console.log(`Bot 起動: ${client.user.tag}`);
   initializeTodayMessage();
-  fetchTodayMessageFromChannel();   // ← ★追加：最新投稿から投稿IDを取得
+  fetchTodayMessageFromChannel();   // 最新投稿から投稿IDを取得
 });
 
 // ===============================
@@ -77,7 +77,7 @@ client.on("messageReactionRemove", async (reaction, user) => {
 });
 
 // ===============================
-// Discord 接続状態ログ（①）
+// Discord 接続状態ログ
 // ===============================
 client.on("error", (err) => {
   console.error("Discord クライアントエラー:", err);
@@ -101,7 +101,7 @@ client.on("shardResume", (id, replayed) => {
 client.login(process.env.DISCORD_TOKEN);
 
 // ===============================
-// Node.js クラッシュ検知（②）
+// Node.js クラッシュ検知
 // ===============================
 process.on("unhandledRejection", (reason, promise) => {
   console.error("Unhandled Rejection at:", promise, "reason:", reason);
@@ -124,10 +124,10 @@ async function initializeTodayMessage() {
       credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT),
       scopes: ["https://www.googleapis.com/auth/spreadsheets"]
     });
-    const client = await auth.getClient();
+    const sheetsClient = await auth.getClient();   // ← 修正：client を上書きしない
 
     const postLog = await sheets.spreadsheets.values.get({
-      auth: client,
+      auth: sheetsClient,
       spreadsheetId: process.env.SHEET_ID,
       range: "投稿ログ!A:C"
     });
@@ -147,7 +147,7 @@ async function initializeTodayMessage() {
     console.log("今日の投稿ID:", todayMessageId);
 
     const settings = await sheets.spreadsheets.values.get({
-      auth: client,
+      auth: sheetsClient,
       spreadsheetId: process.env.SHEET_ID,
       range: "設定!B1:B6"
     });
@@ -164,13 +164,12 @@ async function initializeTodayMessage() {
     console.error("initializeTodayMessage エラー:", err);
   }
 }
-
 // ===============================
 // ★③ 最新投稿から今日の投稿IDを取得
 // ===============================
 async function fetchTodayMessageFromChannel() {
   try {
-    const channel = await client.channels.fetch("1413402712258904145");
+    const channel = await client.channels.fetch(process.env.CHANNEL_ID);
     if (!channel) {
       console.error("チャンネルが見つかりません");
       return;
@@ -202,7 +201,6 @@ async function fetchTodayMessageFromChannel() {
     await latest.react("🍚");
     await latest.react("❌");
 
-
   } catch (err) {
     console.error("fetchTodayMessageFromChannel エラー:", err);
   }
@@ -217,26 +215,26 @@ async function writeTodayMessageIdToSheet(messageId) {
       credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT),
       scopes: ["https://www.googleapis.com/auth/spreadsheets"]
     });
-    const client = await auth.getClient();
+    const sheetsClient = await auth.getClient();   // ← 修正済み
 
     const today = getTodayDateString();
 
     // 投稿ログを取得して重複チェック
-const postLog = await sheets.spreadsheets.values.get({
-  auth: client,
-  spreadsheetId: process.env.SHEET_ID,
-  range: "投稿ログ!A:C"
-});
+    const postLog = await sheets.spreadsheets.values.get({
+      auth: sheetsClient,
+      spreadsheetId: process.env.SHEET_ID,
+      range: "投稿ログ!A:C"
+    });
 
-const rows = postLog.data.values || [];
-const alreadyExists = rows.some(row => row[0] === today && row[1] === messageId);
-if (alreadyExists) {
-  console.log("投稿IDは既に記録済みのため、書き込みをスキップします");
-  return;
-}
+    const rows = postLog.data.values || [];
+    const alreadyExists = rows.some(row => row[0] === today && row[1] === messageId);
+    if (alreadyExists) {
+      console.log("投稿IDは既に記録済みのため、書き込みをスキップします");
+      return;
+    }
 
     await sheets.spreadsheets.values.append({
-      auth: client,
+      auth: sheetsClient,
       spreadsheetId: process.env.SHEET_ID,
       range: "投稿ログ!A:C",
       valueInputOption: "USER_ENTERED",
@@ -298,7 +296,6 @@ async function handleReactionAdd(reaction, user) {
     console.error("handleReactionAdd エラー:", err);
   }
 }
-
 // ===============================
 // リアクション削除（キャンセル）
 // ===============================
@@ -313,6 +310,7 @@ async function handleReactionRemove(reaction, user) {
 
     const emoji = reaction.emoji.name;
 
+    // ❌ の場合は即キャンセル
     if (emoji === "❌") {
       const member = await findMember(user.id);
       if (!member) return;
@@ -329,6 +327,7 @@ async function handleReactionRemove(reaction, user) {
       return;
     }
 
+    // 🍱 / 🍚 のキャンセル
     if (emoji === "🍱" || emoji === "🍚") {
 
       if (deadlineCheck === "ON" && isAfterDeadline()) {
@@ -364,10 +363,10 @@ async function findMember(discordId) {
       credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT),
       scopes: ["https://www.googleapis.com/auth/spreadsheets"]
     });
-    const client = await auth.getClient();
+    const sheetsClient = await auth.getClient();   // ← 修正済み
 
     const res = await sheets.spreadsheets.values.get({
-      auth: client,
+      auth: sheetsClient,
       spreadsheetId: process.env.SHEET_ID,
       range: "名簿!A:E"
     });
@@ -396,20 +395,21 @@ async function findMember(discordId) {
 }
 
 // ===============================
-// リアクションログ書き込み（JST対応版）
+// リアクションログ書き込み（JST対応＋client上書き修正版）
 // ===============================
 async function writeReactionLog(data) {
   try {
+    // Sheets 用クライアント
     const auth = new google.auth.GoogleAuth({
       credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT),
       scopes: ["https://www.googleapis.com/auth/spreadsheets"]
     });
-    const client = await auth.getClient();
+    const sheetsClient = await auth.getClient();   // ← 修正：client を上書きしない
 
     // ===== JST のリアクション時間 =====
     const now = new Date();
-    now.setHours(now.getHours() + 9); // JST へ変換
-    const reactionTime = now.toTimeString().slice(0, 5); // HH:MM
+    now.setHours(now.getHours() + 9); // JST
+    const reactionTime = now.toTimeString().slice(0, 5);
 
     const today = getTodayDateString();
 
@@ -420,7 +420,7 @@ async function writeReactionLog(data) {
       const message = await channel.messages.fetch(todayMessageId);
 
       const postTime = new Date(message.createdTimestamp);
-      postTime.setHours(postTime.getHours() + 9); // JST へ変換
+      postTime.setHours(postTime.getHours() + 9); // JST
 
       const h = postTime.getHours();
       const m = ("0" + postTime.getMinutes()).slice(-2);
@@ -445,7 +445,7 @@ async function writeReactionLog(data) {
     ];
 
     await sheets.spreadsheets.values.append({
-      auth: client,
+      auth: sheetsClient,
       spreadsheetId: process.env.SHEET_ID,
       range: "リアクションログ!A:J",
       valueInputOption: "USER_ENTERED",
