@@ -71,7 +71,7 @@ client.on("messageCreate", async (message) => {
   try {
     if (message.author.bot) return;
     if (!message.embeds || message.embeds.length === 0) return;
-    ...
+
   try {
     // Bot 自身の投稿は無視
     if (message.author.bot) return;
