@@ -69,10 +69,6 @@ client.on("messageCreate", async (message) => {
    console.log("messageCreate 発火:", message.id, message.author.username);
 
   try {
-    if (message.author.bot) return;
-    if (!message.embeds || message.embeds.length === 0) return;
-
-  try {
     // Bot 自身の投稿は無視
     if (message.author.bot) return;
 
