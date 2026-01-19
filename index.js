@@ -54,12 +54,67 @@ function getTodayDateString() {
 }
 
 // ===============================
+// ★ 締切設定を毎回取得する関数（新規追加）
+// ===============================
+async function loadDeadlineSettings() {
+  const auth = new google.auth.GoogleAuth({
+    credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT),
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"]
+  });
+  const sheetsClient = await auth.getClient();
+  const sheetsApi = google.sheets({ version: "v4", auth: sheetsClient });
+
+  const settingsSheet = await sheetsApi.spreadsheets.values.get({
+    auth: sheetsClient,
+    spreadsheetId: process.env.SHEET_ID,
+    range: "設定!A1:B20"
+  });
+
+  const settingsRows = settingsSheet.data.values;
+
+  function getSetting(name) {
+    const row = settingsRows.find(r => r[0] === name);
+    return row ? row[1] : null;
+  }
+
+  const fixedDeadline = getSetting("締切固定モード");
+  const deadlineMode = getSetting("締切モード");
+  const deadlineCheckSetting = getSetting("締切チェック");
+  const optionalMinutes = getSetting("締切任意モード");
+
+  let deadlineTime;
+
+  if (deadlineMode === "固定") {
+    deadlineTime = fixedDeadline;
+  } else {
+    const postTime = getSetting("投稿時間");
+    const [ph, pm] = postTime.split(":").map(Number);
+    const base = new Date();
+    base.setHours(ph);
+    base.setMinutes(pm);
+    base.setSeconds(0);
+
+    const addMinutes = parseFloat(optionalMinutes) * 60;
+    base.setMinutes(base.getMinutes() + addMinutes);
+
+    const hh = String(base.getHours()).padStart(2, "0");
+    const mm = String(base.getMinutes()).padStart(2, "0");
+    deadlineTime = `${hh}:${mm}`;
+  }
+
+  return {
+    deadlineTime,
+    deadlineCheck: deadlineCheckSetting
+  };
+}
+
+// ===============================
 // ④ Bot 起動時
 // ===============================
 client.once("ready", () => {
   console.log(`Bot 起動: ${client.user.tag}`);
   initializeTodayMessage();
-  fetchTodayMessageFromChannel();   // 最新投稿から投稿IDを取得
+  fetchTodayMessageFromChannel();
 });
 
 // ===============================
@@ -69,23 +124,12 @@ client.on("messageCreate", async (message) => {
   console.log("messageCreate 発火:", message.id, message.author.username);
 
   try {
-    // Bot 投稿でも GAS の投稿（embed付き）は処理する
-    if (message.author.bot && (!message.embeds || message.embeds.length === 0)) {
-      console.log("Bot 投稿（embedなし）のため無視");
-      return;
-    }
-
-    // embed が無い投稿は無視（GAS の投稿は必ず embed 付き）
-    if (!message.embeds || message.embeds.length === 0) {
-      console.log("embed が無いため無視");
-      return;
-    }
+    if (message.author.bot && (!message.embeds || message.embeds.length === 0)) return;
+    if (!message.embeds || message.embeds.length === 0) return;
 
     const embed = message.embeds[0];
     const title = embed?.title || "";
-    console.log("受信タイトル:", title);
 
-    // 今日の日付（BOT の判定ロジックと同じ）
     const today = getTodayDateString();
     const [year, month, day] = today.split("/");
 
@@ -93,41 +137,25 @@ client.on("messageCreate", async (message) => {
     const key2 = `${String(year).slice(-2)}年${month}${day}日`;
     const key3 = `${parseInt(month)}月${parseInt(day)}日`;
 
-    console.log("期待キー:", key1, "/", key2, "/", key3);
-
     const isTodayPost =
       title.includes(key1) ||
       title.includes(key2) ||
       title.includes(key3);
 
-    console.log("isTodayPost 判定:", isTodayPost);
+    if (!isTodayPost) return;
 
-    if (!isTodayPost) {
-      console.log("→ 今日の投稿ではないため処理終了");
-      return;
-    }
-
-    // 今日の投稿として認識
     todayMessageId = message.id;
-    console.log("今日の投稿を検出:", todayMessageId);
 
-    // 🔽 締切チェック
     if (deadlineCheck === "ON" && isAfterDeadline()) {
-      console.log("締切時間を過ぎているためリアクション拒否");
       await message.reply("⚠ 締切時間を過ぎているため、リアクション受付できません");
       return;
     }
 
-    // 投稿ログに書き込み
-    console.log("writeTodayMessageIdToSheet を呼び出します:", todayMessageId);
     await writeTodayMessageIdToSheet(todayMessageId);
 
-    // リアクション付与
-    console.log("リアクション付与開始");
     await message.react("🍱");
     await message.react("🍚");
     await message.react("❌");
-    console.log("リアクション付与完了");
 
   } catch (err) {
     console.error("messageCreate エラー:", err);
@@ -140,32 +168,23 @@ client.on("messageCreate", async (message) => {
 client.on("messageReactionAdd", async (reaction, user) => {
   try {
     if (user.bot) return;
-
-    // 今日の投稿以外は無視
     if (reaction.message.id !== todayMessageId) return;
 
-    // リアクション情報の補完
     if (reaction.partial) await reaction.fetch().catch(() => {});
     if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
 
-    // 🔽 締切チェック用の設定値を毎回取得 ←★ここが追加ポイント
-    ({ deadlineCheck, deadlineTime } = await getSettingsFromSheet());
+    // ★ 締切設定を毎回取得
+    ({ deadlineCheck, deadlineTime } = await loadDeadlineSettings());
 
-    // 🔽 締切チェック（ここが唯一の締切判定）
     if (deadlineCheck === "ON" && isAfterDeadline()) {
-      console.log("締切後の注文リアクションを拒否:", user.username);
-
       await reaction.users.remove(user.id).catch(() => {});
-
       await reaction.message.reply({
         content: `<@${user.id}> ⚠ 締切時間を過ぎているため、注文は受付できません`,
         allowedMentions: { users: [user.id] }
       }).catch(() => {});
-
       return;
     }
 
-    // 🔽 締切前なら通常処理へ
     await handleReactionAdd(reaction, user);
 
   } catch (err) {
@@ -179,22 +198,20 @@ client.on("messageReactionAdd", async (reaction, user) => {
 client.on("messageReactionRemove", async (reaction, user) => {
   try {
     if (user.bot) return;
-
     if (reaction.message.id !== todayMessageId) return;
 
     if (reaction.partial) await reaction.fetch().catch(() => {});
     if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
 
-    // 🔽 締切後はキャンセル不可
-    if (deadlineCheck === "ON" && isAfterDeadline()) {
-      console.log("締切後のキャンセル拒否:", user.username);
+    // ★ 締切設定を毎回取得
+    ({ deadlineCheck, deadlineTime } = await loadDeadlineSettings());
 
+    if (deadlineCheck === "ON" && isAfterDeadline()) {
       await reaction.message.react(reaction.emoji.name).catch(() => {});
       await user.send("締切後のためキャンセルできません").catch(() => {});
       return;
     }
 
-    // 🔽 締切前なら通常処理へ
     await handleReactionRemove(reaction, user);
 
   } catch (err) {
@@ -241,7 +258,7 @@ process.on("uncaughtException", (err) => {
 // =======================================================
 
 // ===============================
-// 今日の投稿ID・締切情報を取得（締切チェック付き）
+// 今日の投稿IDを取得（締切設定はここでは取得しない）
 // ===============================
 async function initializeTodayMessage() {
   try {
@@ -252,9 +269,7 @@ async function initializeTodayMessage() {
     const sheetsClient = await auth.getClient();
     const sheets = google.sheets({ version: "v4", auth: sheetsClient });
 
-    // -------------------------------
-    // ① 投稿ログから今日の投稿IDを取得
-    // -------------------------------
+    // 投稿ログから今日の投稿IDを取得
     const postLog = await sheets.spreadsheets.values.get({
       auth: sheetsClient,
       spreadsheetId: process.env.SHEET_ID,
@@ -275,81 +290,14 @@ async function initializeTodayMessage() {
 
     console.log("今日の投稿ID:", todayMessageId);
 
-    // -------------------------------
-    // ② 設定シートを読み取り（A列=項目, B列=値）
-    // -------------------------------
-    const settingsSheet = await sheets.spreadsheets.values.get({
-      auth: sheetsClient,
-      spreadsheetId: process.env.SHEET_ID,
-      range: "設定!A1:B20"
-    });
-
-    const settingsRows = settingsSheet.data.values;
-
-    // 項目名で検索する関数
-    function getSetting(name) {
-      const row = settingsRows.find(r => r[0] === name);
-      return row ? row[1] : null;
-    }
-
-    // 必要な設定値を取得
-    const fixedDeadline = getSetting("締切固定モード");   // 例: "9:00"
-    const deadlineMode  = getSetting("締切モード");        // 任意 / 固定
-    const deadlineCheckSetting = getSetting("締切チェック"); // ON / OFF
-    const optionalMinutes = getSetting("締切任意モード");   // 例: "2"（2時間）
-
-    console.log("設定値 読み取り:");
-    console.log("  締切固定モード:", fixedDeadline);
-    console.log("  締切モード:", deadlineMode);
-    console.log("  締切チェック:", deadlineCheckSetting);
-    console.log("  締切任意モード:", optionalMinutes);
-
-    // -------------------------------
-    // ③ 締切時刻を決定
-    // -------------------------------
-    if (deadlineMode === "固定") {
-      deadlineTime = fixedDeadline; // "9:00"
-    } else {
-      // 任意モード → 投稿時間 + 任意時間
-      const postTime = getSetting("投稿時間"); // "7:00"
-      const [ph, pm] = postTime.split(":").map(Number);
-      const base = new Date();
-      base.setHours(ph);
-      base.setMinutes(pm);
-      base.setSeconds(0);
-
-      const addMinutes = parseFloat(optionalMinutes) * 60;
-      base.setMinutes(base.getMinutes() + addMinutes);
-
-      const hh = String(base.getHours()).padStart(2, "0");
-      const mm = String(base.getMinutes()).padStart(2, "0");
-      deadlineTime = `${hh}:${mm}`;
-    }
-
-    deadlineCheck = deadlineCheckSetting;
-
-    console.log("最終的な締切時刻:", deadlineTime);
-    console.log("締切チェック:", deadlineCheck);
-
-    // -------------------------------
-    // ④ 締切チェック結果を計算
-    // -------------------------------
-    if (deadlineCheck === "ON") {
-      const [h, m] = deadlineTime.split(":").map(Number);
-      const now = new Date();
-      const deadline = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
-
-      isDeadlinePassed = now > deadline;
-      console.log("締切チェック結果:", isDeadlinePassed ? "締切過ぎ" : "受付中");
-    } else {
-      isDeadlinePassed = false;
-      console.log("締切チェック結果: 無効（常に受付）");
-    }
+    // ※ 締切設定の取得は loadDeadlineSettings() に完全移行済み
 
   } catch (err) {
     console.error("initializeTodayMessage エラー:", err);
   }
-}// ===============================
+}
+
+// ===============================
 // ★③ 最新投稿から今日の投稿IDを取得（年入りタイトル対応版）
 // ===============================
 async function fetchTodayMessageFromChannel() {
@@ -367,18 +315,16 @@ async function fetchTodayMessageFromChannel() {
       return;
     }
 
-    const today = getTodayDateString(); // 2026/01/16
+    const today = getTodayDateString();
     const [year, month, day] = today.split("/");
 
-    // 判定キーを複数用意（GAS のタイトル揺れに対応）
-    const key1 = `${parseInt(year)}年${parseInt(month)}月${parseInt(day)}日`; // 2026年1月16日
-    const key2 = `${String(year).slice(-2)}年${month}${day}日`;              // 26年01月16日
-    const key3 = `${parseInt(month)}月${parseInt(day)}日`;                   // 1月16日（旧形式）
+    const key1 = `${parseInt(year)}年${parseInt(month)}月${parseInt(day)}日`;
+    const key2 = `${String(year).slice(-2)}年${month}${day}日`;
+    const key3 = `${parseInt(month)}月${parseInt(day)}日`;
 
     const embed = latest.embeds[0];
     const title = embed?.title || "";
 
-    // どれか1つでも含まれていれば「今日の投稿」と判定
     const isTodayPost =
       title.includes(key1) ||
       title.includes(key2) ||
@@ -400,13 +346,12 @@ async function fetchTodayMessageFromChannel() {
     // Bot がリアクションを付ける
     await latest.react("🍱");
     await latest.react("🍚");
-    await latest.react("❌");
+   	await latest.react("❌");
 
   } catch (err) {
     console.error("fetchTodayMessageFromChannel エラー:", err);
   }
 }
-
 // ===============================
 // ★③ 投稿IDをスプレッドシートに書き込む（完全版）
 // ===============================
@@ -420,15 +365,12 @@ async function writeTodayMessageIdToSheet(messageId) {
     });
 
     const sheetsClient = await auth.getClient();
-
-    // ★ これが無かったのが原因（必須）
     const sheets = google.sheets({ version: "v4", auth: sheetsClient });
 
     const today = getTodayDateString();
 
     console.log("投稿ログ取得開始");
 
-    // 投稿ログを取得して重複チェック
     const postLog = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.SHEET_ID,
       range: "投稿ログ!A:C"
@@ -444,7 +386,6 @@ async function writeTodayMessageIdToSheet(messageId) {
 
     console.log("投稿ログに書き込み準備:", today, messageId);
 
-    // 投稿ログに追記
     await sheets.spreadsheets.values.append({
       spreadsheetId: process.env.SHEET_ID,
       range: "投稿ログ!A:C",
@@ -501,6 +442,7 @@ async function handleReactionAdd(reaction, user) {
     console.error("handleReactionAdd エラー:", err);
   }
 }
+
 // ===============================
 // リアクション削除の実処理（キャンセル）
 // ===============================
@@ -573,25 +515,22 @@ async function findMember(discordId) {
 }
 
 // ===============================
-// リアクションログ書き込み（JST対応＋client上書き修正版）
+// リアクションログ書き込み（JST対応）
 // ===============================
 async function writeReactionLog(data) {
   try {
-    // Sheets 用クライアント
     const auth = new google.auth.GoogleAuth({
       credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT),
       scopes: ["https://www.googleapis.com/auth/spreadsheets"]
     });
     const sheetsClient = await auth.getClient();
 
-    // ===== JST のリアクション時間 =====
     const now = new Date();
     now.setHours(now.getHours() + 9);
     const reactionTime = now.toTimeString().slice(0, 5);
 
     const today = getTodayDateString();
 
-    // ===== 投稿メッセージの JST 時刻を取得 =====
     let postTimeStr = "";
     try {
       const channel = await client.channels.fetch(process.env.CHANNEL_ID);
@@ -608,7 +547,6 @@ async function writeReactionLog(data) {
       postTimeStr = "取得失敗";
     }
 
-    // ===== A:J の行データ =====
     const row = [
       today,
       data.discordId,
@@ -645,14 +583,12 @@ function isAfterDeadline() {
 
   let clean = deadlineTime;
 
-  // Date型で来た場合は "HH:MM" に変換
   if (clean instanceof Date) {
     const h = clean.getHours().toString().padStart(2, "0");
     const m = clean.getMinutes().toString().padStart(2, "0");
     clean = `${h}:${m}`;
   }
 
-  // 文字列として扱う
   clean = String(clean).trim();
 
   const parts = clean.split(":");

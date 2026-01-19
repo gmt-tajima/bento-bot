@@ -54,113 +54,167 @@ function getTodayDateString() {
 }
 
 // ===============================
+// ★ 締切設定を毎回取得する関数（新規追加）
+// ===============================
+async function loadDeadlineSettings() {
+  const auth = new google.auth.GoogleAuth({
+    credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT),
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"]
+  });
+  const sheetsClient = await auth.getClient();
+  const sheetsApi = google.sheets({ version: "v4", auth: sheetsClient });
+
+  const settingsSheet = await sheetsApi.spreadsheets.values.get({
+    auth: sheetsClient,
+    spreadsheetId: process.env.SHEET_ID,
+    range: "設定!A1:B20"
+  });
+
+  const settingsRows = settingsSheet.data.values;
+
+  function getSetting(name) {
+    const row = settingsRows.find(r => r[0] === name);
+    return row ? row[1] : null;
+  }
+
+  const fixedDeadline = getSetting("締切固定モード");
+  const deadlineMode = getSetting("締切モード");
+  const deadlineCheckSetting = getSetting("締切チェック");
+  const optionalMinutes = getSetting("締切任意モード");
+
+  let deadlineTime;
+
+  if (deadlineMode === "固定") {
+    deadlineTime = fixedDeadline;
+  } else {
+    const postTime = getSetting("投稿時間");
+    const [ph, pm] = postTime.split(":").map(Number);
+    const base = new Date();
+    base.setHours(ph);
+    base.setMinutes(pm);
+    base.setSeconds(0);
+
+    const addMinutes = parseFloat(optionalMinutes) * 60;
+    base.setMinutes(base.getMinutes() + addMinutes);
+
+    const hh = String(base.getHours()).padStart(2, "0");
+    const mm = String(base.getMinutes()).padStart(2, "0");
+    deadlineTime = `${hh}:${mm}`;
+  }
+
+  return {
+    deadlineTime,
+    deadlineCheck: deadlineCheckSetting
+  };
+}
+
+// ===============================
 // ④ Bot 起動時
 // ===============================
 client.once("ready", () => {
   console.log(`Bot 起動: ${client.user.tag}`);
   initializeTodayMessage();
-  fetchTodayMessageFromChannel();   // 最新投稿から投稿IDを取得
+  fetchTodayMessageFromChannel();
 });
 
 // ===============================
-// ⑤ リアクション追加
+// ★ 新しいメッセージが投稿された時の処理（GAS対応）
 // ===============================
-client.on("messageReactionAdd", async (reaction, user) => {
-  handleReactionAdd(reaction, user);
-});
+client.on("messageCreate", async (message) => {
+  console.log("messageCreate 発火:", message.id, message.author.username);
 
-// ===============================
-// ⑥ リアクション削除
-// ===============================
-client.on("messageReactionRemove", async (reaction, user) => {
-  handleReactionRemove(reaction, user);
-});
-
-// ===============================
-// Discord 接続状態ログ
-// ===============================
-client.on("error", (err) => {
-  console.error("Discord クライアントエラー:", err);
-});
-
-client.on("shardDisconnect", (event, id) => {
-  console.log(`Shard ${id} disconnected`, event);
-});
-
-client.on("shardReconnecting", (id) => {
-  console.log(`Shard ${id} reconnecting`);
-});
-
-client.on("shardResume", (id, replayed) => {
-  console.log(`Shard ${id} resumed. Replayed events: ${replayed}`);
-});
-
-// ===============================
-// ⑦ Bot ログイン
-// ===============================
-client.login(process.env.DISCORD_TOKEN);
-
-// ===============================
-// Node.js クラッシュ検知
-// ===============================
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("Unhandled Rejection at:", promise, "reason:", reason);
-});
-
-process.on("uncaughtException", (err) => {
-  console.error("Uncaught Exception:", err);
-});
-
-// =======================================================
-// ここから下が 6つの関数（Render版）
-// =======================================================
-
-// ===============================
-// 今日の投稿ID・締切情報を取得
-// ===============================
-async function initializeTodayMessage() {
   try {
-    const auth = new google.auth.GoogleAuth({
-      credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT),
-      scopes: ["https://www.googleapis.com/auth/spreadsheets"]
-    });
-    const sheetsClient = await auth.getClient();   // ← 修正：client を上書きしない
+    if (message.author.bot && (!message.embeds || message.embeds.length === 0)) return;
+    if (!message.embeds || message.embeds.length === 0) return;
 
-    const postLog = await sheets.spreadsheets.values.get({
-      auth: sheetsClient,
-      spreadsheetId: process.env.SHEET_ID,
-      range: "投稿ログ!A:C"
-    });
-
-    const rows = postLog.data.values;
-    if (!rows) return;
+    const embed = message.embeds[0];
+    const title = embed?.title || "";
 
     const today = getTodayDateString();
+    const [year, month, day] = today.split("/");
 
-    for (let i = rows.length - 1; i >= 0; i--) {
-      if (rows[i][0] === today) {
-        todayMessageId = rows[i][1];
-        break;
-      }
+    const key1 = `${parseInt(year)}年${parseInt(month)}月${parseInt(day)}日`;
+    const key2 = `${String(year).slice(-2)}年${month}${day}日`;
+    const key3 = `${parseInt(month)}月${parseInt(day)}日`;
+
+    const isTodayPost =
+      title.includes(key1) ||
+      title.includes(key2) ||
+      title.includes(key3);
+
+    if (!isTodayPost) return;
+
+    todayMessageId = message.id;
+
+    if (deadlineCheck === "ON" && isAfterDeadline()) {
+      await message.reply("⚠ 締切時間を過ぎているため、リアクション受付できません");
+      return;
     }
 
-    console.log("今日の投稿ID:", todayMessageId);
+    await writeTodayMessageIdToSheet(todayMessageId);
 
-    const settings = await sheets.spreadsheets.values.get({
-      auth: sheetsClient,
-      spreadsheetId: process.env.SHEET_ID,
-      range: "設定!B1:B6"
-    });
-
-    const v = settings.data.values.map(r => r[0]);
-
-    deadlineTime = v[2];
-    deadlineCheck = v[4];
-
-    console.log("締切時刻:", deadlineTime);
-    console.log("締切チェック:", deadlineCheck);
+    await message.react("🍱");
+    await message.react("🍚");
+    await message.react("❌");
 
   } catch (err) {
-    console.error("initializeTodayMessage エラー:", err);
+    console.error("messageCreate エラー:", err);
   }
-}
+});
+
+// ===============================
+// ⑤ リアクション追加（注文）
+// ===============================
+client.on("messageReactionAdd", async (reaction, user) => {
+  try {
+    if (user.bot) return;
+    if (reaction.message.id !== todayMessageId) return;
+
+    if (reaction.partial) await reaction.fetch().catch(() => {});
+    if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
+
+    // ★ 締切設定を毎回取得
+    ({ deadlineCheck, deadlineTime } = await loadDeadlineSettings());
+
+    if (deadlineCheck === "ON" && isAfterDeadline()) {
+      await reaction.users.remove(user.id).catch(() => {});
+      await reaction.message.reply({
+        content: `<@${user.id}> ⚠ 締切時間を過ぎているため、注文は受付できません`,
+        allowedMentions: { users: [user.id] }
+      }).catch(() => {});
+      return;
+    }
+
+    await handleReactionAdd(reaction, user);
+
+  } catch (err) {
+    console.error("messageReactionAdd エラー:", err);
+  }
+});
+
+// ===============================
+// ⑥ リアクション削除（キャンセル）
+// ===============================
+client.on("messageReactionRemove", async (reaction, user) => {
+  try {
+    if (user.bot) return;
+    if (reaction.message.id !== todayMessageId) return;
+
+    if (reaction.partial) await reaction.fetch().catch(() => {});
+    if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
+
+    // ★ 締切設定を毎回取得
+    ({ deadlineCheck, deadlineTime } = await loadDeadlineSettings());
+
+    if (deadlineCheck === "ON" && isAfterDeadline()) {
+      await reaction.message.react(reaction.emoji.name).catch(() => {});
+      await user.send("締切後のためキャンセルできません").catch(() => {});
+      return;
+    }
+
+    await handleReactionRemove(reaction, user);
+
+  } catch (err) {
+    console.error("messageReactionRemove エラー:", err);
+  }
+});

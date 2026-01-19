@@ -1,0 +1,271 @@
+
+// ===============================
+// ★③ 投稿IDをスプレッドシートに書き込む（完全版）
+// ===============================
+async function writeTodayMessageIdToSheet(messageId) {
+  try {
+    console.log("writeTodayMessageIdToSheet 開始:", messageId);
+
+    const auth = new google.auth.GoogleAuth({
+      credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT),
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"]
+    });
+
+    const sheetsClient = await auth.getClient();
+
+    // ★ これが無かったのが原因（必須）
+    const sheets = google.sheets({ version: "v4", auth: sheetsClient });
+
+    const today = getTodayDateString();
+
+    console.log("投稿ログ取得開始");
+
+    // 投稿ログを取得して重複チェック
+    const postLog = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.SHEET_ID,
+      range: "投稿ログ!A:C"
+    });
+
+    const rows = postLog.data.values || [];
+    const alreadyExists = rows.some(row => row[0] === today && row[1] === messageId);
+
+    if (alreadyExists) {
+      console.log("投稿IDは既に記録済みのため、書き込みをスキップします");
+      return;
+    }
+
+    console.log("投稿ログに書き込み準備:", today, messageId);
+
+    // 投稿ログに追記
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: process.env.SHEET_ID,
+      range: "投稿ログ!A:C",
+      valueInputOption: "USER_ENTERED",
+      requestBody: {
+        values: [[today, messageId, "Bot自動取得"]]
+      }
+    });
+
+    console.log("投稿IDをスプレッドシートに書き込み完了:", messageId);
+
+  } catch (err) {
+    console.error("writeTodayMessageIdToSheet エラー:", err);
+  }
+}
+
+// ===============================
+// リアクション追加の実処理（締切チェックなし）
+// ===============================
+async function handleReactionAdd(reaction, user) {
+  try {
+    if (user.bot) return;
+
+    if (reaction.partial) await reaction.fetch().catch(() => {});
+    if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
+
+    if (reaction.message.id !== todayMessageId) return;
+
+    const emoji = reaction.emoji.name;
+
+    if (!ALLOWED_REACTIONS.includes(emoji)) {
+      await reaction.users.remove(user.id).catch(() => {});
+      return;
+    }
+
+    if (emoji === "❌") return;
+
+    const member = await findMember(user.id);
+    if (!member) {
+      await user.send("名簿に登録されていません。総務に連絡してください。").catch(() => {});
+      return;
+    }
+
+    await writeReactionLog({
+      discordId: user.id,
+      name: member.name,
+      internalId: member.internalId,
+      place: member.place,
+      type: emoji,
+      status: deadlineCheck === "OFF" ? "特別受付" : "注文"
+    });
+
+  } catch (err) {
+    console.error("handleReactionAdd エラー:", err);
+  }
+}
+// ===============================
+// リアクション削除の実処理（キャンセル）
+// ===============================
+async function handleReactionRemove(reaction, user) {
+  try {
+    if (user.bot) return;
+
+    if (reaction.partial) await reaction.fetch().catch(() => {});
+    if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
+
+    if (reaction.message.id !== todayMessageId) return;
+
+    const emoji = reaction.emoji.name;
+
+    const member = await findMember(user.id);
+    if (!member) return;
+
+    await writeReactionLog({
+      discordId: user.id,
+      name: member.name,
+      internalId: member.internalId,
+      place: member.place,
+      type: emoji,
+      status: "キャンセル"
+    });
+
+  } catch (err) {
+    console.error("handleReactionRemove エラー:", err);
+  }
+}
+
+// ===============================
+// 名簿照合
+// ===============================
+async function findMember(discordId) {
+  try {
+    const auth = new google.auth.GoogleAuth({
+      credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT),
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"]
+    });
+    const sheetsClient = await auth.getClient();
+
+    const res = await sheets.spreadsheets.values.get({
+      auth: sheetsClient,
+      spreadsheetId: process.env.SHEET_ID,
+      range: "名簿!A:E"
+    });
+
+    const rows = res.data.values;
+    if (!rows) return null;
+
+    for (const row of rows) {
+      if (row[0] === discordId) {
+        return {
+          discordId: row[0],
+          internalId: row[1],
+          name: row[2],
+          place: row[3],
+          lang: row[4]
+        };
+      }
+    }
+
+    return null;
+
+  } catch (err) {
+    console.error("findMember エラー:", err);
+    return null;
+  }
+}
+
+// ===============================
+// リアクションログ書き込み（JST対応＋client上書き修正版）
+// ===============================
+async function writeReactionLog(data) {
+  try {
+    // Sheets 用クライアント
+    const auth = new google.auth.GoogleAuth({
+      credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT),
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"]
+    });
+    const sheetsClient = await auth.getClient();
+
+    // ===== JST のリアクション時間 =====
+    const now = new Date();
+    now.setHours(now.getHours() + 9);
+    const reactionTime = now.toTimeString().slice(0, 5);
+
+    const today = getTodayDateString();
+
+    // ===== 投稿メッセージの JST 時刻を取得 =====
+    let postTimeStr = "";
+    try {
+      const channel = await client.channels.fetch(process.env.CHANNEL_ID);
+      const message = await channel.messages.fetch(todayMessageId);
+
+      const postTime = new Date(message.createdTimestamp);
+      postTime.setHours(postTime.getHours() + 9);
+
+      const h = postTime.getHours();
+      const m = ("0" + postTime.getMinutes()).slice(-2);
+      postTimeStr = `${h}:${m}`;
+    } catch (err) {
+      console.error("投稿時刻の取得に失敗:", err);
+      postTimeStr = "取得失敗";
+    }
+
+    // ===== A:J の行データ =====
+    const row = [
+      today,
+      data.discordId,
+      data.name,
+      data.internalId,
+      data.place,
+      data.type,
+      data.status,
+      reactionTime,
+      todayMessageId,
+      postTimeStr
+    ];
+
+    await sheets.spreadsheets.values.append({
+      auth: sheetsClient,
+      spreadsheetId: process.env.SHEET_ID,
+      range: "リアクションログ!A:J",
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values: [row] }
+    });
+
+    console.log("ログ書き込み:", row);
+
+  } catch (err) {
+    console.error("writeReactionLog エラー:", err);
+  }
+}
+
+// ===============================
+// 締切判定
+// ===============================
+function isAfterDeadline() {
+  if (!deadlineTime) return false;
+
+  let clean = deadlineTime;
+
+  // Date型で来た場合は "HH:MM" に変換
+  if (clean instanceof Date) {
+    const h = clean.getHours().toString().padStart(2, "0");
+    const m = clean.getMinutes().toString().padStart(2, "0");
+    clean = `${h}:${m}`;
+  }
+
+  // 文字列として扱う
+  clean = String(clean).trim();
+
+  const parts = clean.split(":");
+  const h = Number(parts[0]);
+  const m = Number(parts[1]);
+
+  if (isNaN(h) || isNaN(m)) {
+    console.log("締切時刻のパースに失敗:", deadlineTime);
+    return false;
+  }
+
+  const now = new Date();
+  const deadline = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    h,
+    m,
+    0,
+    0
+  );
+
+  return now > deadline;
+}
