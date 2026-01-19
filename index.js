@@ -661,12 +661,19 @@ async function writeReactionLog(data) {
 function isAfterDeadline() {
   if (!deadlineTime) return false;
 
-  // 余計な空白や改行を除去
-  const clean = deadlineTime.trim();
+  let clean = deadlineTime;
 
-  // 秒があっても対応できるようにする
+  // Date型で来た場合は "HH:MM" に変換
+  if (clean instanceof Date) {
+    const h = clean.getHours().toString().padStart(2, "0");
+    const m = clean.getMinutes().toString().padStart(2, "0");
+    clean = `${h}:${m}`;
+  }
+
+  // 文字列として扱う
+  clean = String(clean).trim();
+
   const parts = clean.split(":");
-
   const h = Number(parts[0]);
   const m = Number(parts[1]);
 
