@@ -148,20 +148,21 @@ client.on("messageReactionAdd", async (reaction, user) => {
     if (reaction.partial) await reaction.fetch().catch(() => {});
     if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
 
+    // 🔽 締切チェック用の設定値を毎回取得 ←★ここが追加ポイント
+    ({ deadlineCheck, deadlineTime } = await getSettingsFromSheet());
+
     // 🔽 締切チェック（ここが唯一の締切判定）
     if (deadlineCheck === "ON" && isAfterDeadline()) {
       console.log("締切後の注文リアクションを拒否:", user.username);
 
-      // リアクションを外す
       await reaction.users.remove(user.id).catch(() => {});
 
-      // エラーメッセージ
       await reaction.message.reply({
         content: `<@${user.id}> ⚠ 締切時間を過ぎているため、注文は受付できません`,
         allowedMentions: { users: [user.id] }
       }).catch(() => {});
 
-      return; // ← ここで完全に終了
+      return;
     }
 
     // 🔽 締切前なら通常処理へ
