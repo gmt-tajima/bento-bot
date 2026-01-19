@@ -207,8 +207,8 @@ client.on("messageReactionRemove", async (reaction, user) => {
     if (reaction.partial) await reaction.fetch().catch(() => {});
     if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
 
-    // ★ 締切後はキャンセル不可（←ここを削除する）
-    // つまり、締切後でも「ユーザーが自分で外した場合だけ」ログに残す
+    // 締切チェックは不要（Add 側で済ませている）
+    // Remove 側は「ユーザーが自分で外したときだけ」ログを残す
 
     await handleReactionRemove(reaction, user);
 
