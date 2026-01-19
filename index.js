@@ -135,17 +135,66 @@ client.on("messageCreate", async (message) => {
 });
 
 // ===============================
-// ⑤ リアクション追加
+// ⑤ リアクション追加（注文）
 // ===============================
 client.on("messageReactionAdd", async (reaction, user) => {
-  handleReactionAdd(reaction, user);
+  try {
+    // Bot のリアクションは無視
+    if (user.bot) return;
+
+    // 今日の投稿以外は無視
+    if (reaction.message.id !== todayMessageId) return;
+
+    // 🔽 締切チェック（注文追加のみ）
+    if (deadlineCheck === "ON" && isAfterDeadline()) {
+      console.log("締切後の注文リアクションを拒否:", user.username);
+
+      // リアクションを外す（注文を無効化）
+      try {
+        await reaction.users.remove(user.id);
+      } catch (err) {
+        console.error("リアクション削除エラー:", err);
+      }
+
+      // エラーメッセージ
+      try {
+        await reaction.message.reply({
+          content: `<@${user.id}> ⚠ 締切時間を過ぎているため、注文は受付できません`,
+          allowedMentions: { users: [user.id] }
+        });
+      } catch (err) {
+        console.error("エラーメッセージ送信エラー:", err);
+      }
+
+      return;
+    }
+
+    // 🔽 締切前なら通常の注文処理へ
+    handleReactionAdd(reaction, user);
+
+  } catch (err) {
+    console.error("messageReactionAdd エラー:", err);
+  }
 });
 
+
 // ===============================
-// ⑥ リアクション削除
+// ⑥ リアクション削除（キャンセル）
 // ===============================
 client.on("messageReactionRemove", async (reaction, user) => {
-  handleReactionRemove(reaction, user);
+  try {
+    // Bot のリアクションは無視
+    if (user.bot) return;
+
+    // 今日の投稿以外は無視
+    if (reaction.message.id !== todayMessageId) return;
+
+    // 🔽 締切後でもキャンセルは許可
+    handleReactionRemove(reaction, user);
+
+  } catch (err) {
+    console.error("messageReactionRemove エラー:", err);
+  }
 });
 
 // ===============================
