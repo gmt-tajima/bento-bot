@@ -661,9 +661,21 @@ async function writeReactionLog(data) {
 function isAfterDeadline() {
   if (!deadlineTime) return false;
 
-  const [h, m] = deadlineTime.split(":").map(Number);
-  const now = new Date();
+  // 余計な空白や改行を除去
+  const clean = deadlineTime.trim();
 
+  // 秒があっても対応できるようにする
+  const parts = clean.split(":");
+
+  const h = Number(parts[0]);
+  const m = Number(parts[1]);
+
+  if (isNaN(h) || isNaN(m)) {
+    console.log("締切時刻のパースに失敗:", deadlineTime);
+    return false;
+  }
+
+  const now = new Date();
   const deadline = new Date(
     now.getFullYear(),
     now.getMonth(),
