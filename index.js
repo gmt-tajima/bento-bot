@@ -139,64 +139,67 @@ client.on("messageCreate", async (message) => {
 // ===============================
 client.on("messageReactionAdd", async (reaction, user) => {
   try {
-    // Bot のリアクションは無視
     if (user.bot) return;
 
     // 今日の投稿以外は無視
     if (reaction.message.id !== todayMessageId) return;
 
-    // 🔽 締切チェック（注文追加のみ）
+    // リアクション情報の補完
+    if (reaction.partial) await reaction.fetch().catch(() => {});
+    if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
+
+    // 🔽 締切チェック（ここが唯一の締切判定）
     if (deadlineCheck === "ON" && isAfterDeadline()) {
       console.log("締切後の注文リアクションを拒否:", user.username);
 
-      // リアクションを外す（注文を無効化）
-      try {
-        await reaction.users.remove(user.id);
-      } catch (err) {
-        console.error("リアクション削除エラー:", err);
-      }
+      // リアクションを外す
+      await reaction.users.remove(user.id).catch(() => {});
 
       // エラーメッセージ
-      try {
-        await reaction.message.reply({
-          content: `<@${user.id}> ⚠ 締切時間を過ぎているため、注文は受付できません`,
-          allowedMentions: { users: [user.id] }
-        });
-      } catch (err) {
-        console.error("エラーメッセージ送信エラー:", err);
-      }
+      await reaction.message.reply({
+        content: `<@${user.id}> ⚠ 締切時間を過ぎているため、注文は受付できません`,
+        allowedMentions: { users: [user.id] }
+      }).catch(() => {});
 
-      return;
+      return; // ← ここで完全に終了
     }
 
-    // 🔽 締切前なら通常の注文処理へ
-    handleReactionAdd(reaction, user);
+    // 🔽 締切前なら通常処理へ
+    await handleReactionAdd(reaction, user);
 
   } catch (err) {
     console.error("messageReactionAdd エラー:", err);
   }
 });
 
-
 // ===============================
 // ⑥ リアクション削除（キャンセル）
 // ===============================
 client.on("messageReactionRemove", async (reaction, user) => {
   try {
-    // Bot のリアクションは無視
     if (user.bot) return;
 
-    // 今日の投稿以外は無視
     if (reaction.message.id !== todayMessageId) return;
 
-    // 🔽 締切後でもキャンセルは許可
-    handleReactionRemove(reaction, user);
+    if (reaction.partial) await reaction.fetch().catch(() => {});
+    if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
+
+    // 🔽 締切後はキャンセル不可
+    if (deadlineCheck === "ON" && isAfterDeadline()) {
+      console.log("締切後のキャンセル拒否:", user.username);
+
+      await reaction.message.react(reaction.emoji.name).catch(() => {});
+      await user.send("締切後のためキャンセルできません").catch(() => {});
+      return;
+    }
+
+    // 🔽 締切前なら通常処理へ
+    await handleReactionRemove(reaction, user);
 
   } catch (err) {
     console.error("messageReactionRemove エラー:", err);
   }
 });
-
 // ===============================
 // Discord 接続状態ログ
 // ===============================
@@ -458,39 +461,29 @@ async function writeTodayMessageIdToSheet(messageId) {
 }
 
 // ===============================
-// リアクション追加（注文）
+// リアクション追加の実処理（締切チェックなし）
 // ===============================
 async function handleReactionAdd(reaction, user) {
   try {
     if (user.bot) return;
 
-    if (reaction.partial) {
-      try { await reaction.fetch(); } catch {}
-    }
-    if (reaction.message.partial) {
-      try { await reaction.message.fetch(); } catch {}
-    }
+    if (reaction.partial) await reaction.fetch().catch(() => {});
+    if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
 
     if (reaction.message.id !== todayMessageId) return;
 
     const emoji = reaction.emoji.name;
 
     if (!ALLOWED_REACTIONS.includes(emoji)) {
-      await reaction.users.remove(user.id);
+      await reaction.users.remove(user.id).catch(() => {});
       return;
     }
 
     if (emoji === "❌") return;
 
-    if (deadlineCheck === "ON" && isAfterDeadline()) {
-      await reaction.users.remove(user.id);
-      await user.send("締切後のため注文できません");
-      return;
-    }
-
     const member = await findMember(user.id);
     if (!member) {
-      await user.send("名簿に登録されていません。総務に連絡してください。");
+      await user.send("名簿に登録されていません。総務に連絡してください。").catch(() => {});
       return;
     }
 
@@ -508,30 +501,18 @@ async function handleReactionAdd(reaction, user) {
   }
 }
 // ===============================
-// リアクション削除（キャンセル）
+// リアクション削除の実処理（キャンセル）
 // ===============================
 async function handleReactionRemove(reaction, user) {
   try {
     if (user.bot) return;
 
-    // partial 対策（安全 fetch）
-    if (reaction.partial) {
-      try { await reaction.fetch(); } catch {}
-    }
-    if (reaction.message.partial) {
-      try { await reaction.message.fetch(); } catch {}
-    }
+    if (reaction.partial) await reaction.fetch().catch(() => {});
+    if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
 
     if (reaction.message.id !== todayMessageId) return;
 
     const emoji = reaction.emoji.name;
-
-    // 締切後はキャンセル不可
-    if (deadlineCheck === "ON" && isAfterDeadline()) {
-      await reaction.users.remove(user.id);
-      await user.send("締切後のためキャンセルできません");
-      return;
-    }
 
     const member = await findMember(user.id);
     if (!member) return;
