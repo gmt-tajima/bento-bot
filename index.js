@@ -612,14 +612,18 @@ async function writeReactionLog(data) {
 function isAfterDeadline() {
   if (!deadlineTime) return false;
 
-  const now = new Date();
   const [h, m] = deadlineTime.split(":").map(Number);
+  const now = new Date();
 
-  const deadline = new Date();
-  deadline.setHours(h);
-  deadline.setMinutes(m);
-  deadline.setSeconds(0);
-  deadline.setMilliseconds(0);
+  const deadline = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    h,
+    m,
+    0,
+    0
+  );
 
   return now > deadline;
 }
