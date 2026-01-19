@@ -181,7 +181,7 @@ process.on("uncaughtException", (err) => {
 // =======================================================
 
 // ===============================
-// 今日の投稿ID・締切情報を取得
+// 今日の投稿ID・締切情報を取得（締切チェック付き）
 // ===============================
 async function initializeTodayMessage() {
   try {
@@ -189,7 +189,8 @@ async function initializeTodayMessage() {
       credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT),
       scopes: ["https://www.googleapis.com/auth/spreadsheets"]
     });
-    const sheetsClient = await auth.getClient();   // ← 修正：client を上書きしない
+    const sheetsClient = await auth.getClient();
+    const sheets = google.sheets({ version: "v4", auth: sheetsClient });
 
     const postLog = await sheets.spreadsheets.values.get({
       auth: sheetsClient,
@@ -219,11 +220,23 @@ async function initializeTodayMessage() {
 
     const v = settings.data.values.map(r => r[0]);
 
-    deadlineTime = v[2];
-    deadlineCheck = v[4];
+    deadlineTime = v[2];      // 締切固定モード（例: "9:00"）
+    deadlineCheck = v[4];     // ON or OFF
 
     console.log("締切時刻:", deadlineTime);
     console.log("締切チェック:", deadlineCheck);
+
+    // 締切チェック判定（Date オブジェクト化）
+    if (deadlineCheck === "ON") {
+      const [hour, minute] = deadlineTime.split(":").map(Number);
+      const now = new Date();
+      const deadline = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute);
+      isDeadlinePassed = now > deadline;
+      console.log("締切チェック結果:", isDeadlinePassed ? "締切過ぎ" : "受付中");
+    } else {
+      isDeadlinePassed = false;
+      console.log("締切チェック結果: 無効（常に受付）");
+    }
 
   } catch (err) {
     console.error("initializeTodayMessage エラー:", err);
