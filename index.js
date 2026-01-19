@@ -54,7 +54,7 @@ function getTodayDateString() {
 }
 
 // ===============================
-// ★ 締切設定を毎回取得する関数（新規追加）
+// ★ 締切設定を毎回取得する関数
 // ===============================
 async function loadDeadlineSettings() {
   const auth = new google.auth.GoogleAuth({
@@ -118,11 +118,9 @@ client.once("ready", () => {
 });
 
 // ===============================
-// ★ 新しいメッセージが投稿された時の処理（GAS対応）
+// ★ 新しいメッセージが投稿された時の処理
 // ===============================
 client.on("messageCreate", async (message) => {
-  console.log("messageCreate 発火:", message.id, message.author.username);
-
   try {
     if (message.author.bot && (!message.embeds || message.embeds.length === 0)) return;
     if (!message.embeds || message.embeds.length === 0) return;
@@ -178,10 +176,16 @@ client.on("messageReactionAdd", async (reaction, user) => {
 
     if (deadlineCheck === "ON" && isAfterDeadline()) {
       await reaction.users.remove(user.id).catch(() => {});
-      await reaction.message.reply({
+
+      const msg = await reaction.message.reply({
         content: `<@${user.id}> ⚠ 締切時間を過ぎているため、注文は受付できません`,
         allowedMentions: { users: [user.id] }
       }).catch(() => {});
+
+      setTimeout(() => {
+        msg.delete().catch(() => {});
+      }, 3000);
+
       return;
     }
 
@@ -208,7 +212,16 @@ client.on("messageReactionRemove", async (reaction, user) => {
 
     if (deadlineCheck === "ON" && isAfterDeadline()) {
       await reaction.message.react(reaction.emoji.name).catch(() => {});
-      await user.send("締切後のためキャンセルできません").catch(() => {});
+
+      const msg = await reaction.message.reply({
+        content: `<@${user.id}> ⚠ 締切後のためキャンセルできません`,
+        allowedMentions: { users: [user.id] }
+      }).catch(() => {});
+
+      setTimeout(() => {
+        msg.delete().catch(() => {});
+      }, 3000);
+
       return;
     }
 
@@ -218,6 +231,7 @@ client.on("messageReactionRemove", async (reaction, user) => {
     console.error("messageReactionRemove エラー:", err);
   }
 });
+
 // ===============================
 // Discord 接続状態ログ
 // ===============================
