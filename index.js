@@ -118,7 +118,7 @@ client.once("ready", () => {
 });
 
 // ===============================
-// ★ 新しいメッセージが投稿された時の処理
+// ★ 新しいメッセージが投稿された時の処理（修正版）
 // ===============================
 client.on("messageCreate", async (message) => {
   try {
@@ -128,29 +128,33 @@ client.on("messageCreate", async (message) => {
     const embed = message.embeds[0];
     const title = embed?.title || "";
 
-    const today = getTodayDateString();
-    const [year, month, day] = today.split("/");
+    // GAS と同じ形式の今日の日付（yy年MM月dd日）
+    const d = new Date();
+    const yy = String(d.getFullYear()).slice(-2);
+    const MM = ("0" + (d.getMonth() + 1)).slice(-2);
+    const dd = ("0" + d.getDate()).slice(-2);
 
-    const key1 = `${parseInt(year)}年${parseInt(month)}月${parseInt(day)}日`;
-    const key2 = `${String(year).slice(-2)}年${month}${day}日`;
-    const key3 = `${parseInt(month)}月${parseInt(day)}日`;
+    const todayKey = `${yy}年${MM}月${dd}日`;  
+    // 例： "26年01月20日"
 
-    const isTodayPost =
-      title.includes(key1) ||
-      title.includes(key2) ||
-      title.includes(key3);
+    // タイトルに今日の日付が含まれているか
+    const isTodayPost = title.includes(todayKey);
 
     if (!isTodayPost) return;
 
+    // 今日の投稿として認識
     todayMessageId = message.id;
 
+    // 締切チェック
     if (deadlineCheck === "ON" && isAfterDeadline()) {
       await message.reply("⚠ 締切時間を過ぎているため、リアクション受付できません");
       return;
     }
 
+    // 投稿ログに書き込み
     await writeTodayMessageIdToSheet(todayMessageId);
 
+    // リアクション付与
     await message.react("🍱");
     await message.react("🍚");
     await message.react("❌");
