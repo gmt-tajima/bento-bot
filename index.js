@@ -271,34 +271,44 @@ async function fetchTodayMessageFromChannel() {
 }
 
 // ===============================
-// ★③ 投稿IDをスプレッドシートに書き込む
+// ★③ 投稿IDをスプレッドシートに書き込む（完全版）
 // ===============================
 async function writeTodayMessageIdToSheet(messageId) {
   try {
+    console.log("writeTodayMessageIdToSheet 開始:", messageId);
+
     const auth = new google.auth.GoogleAuth({
       credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT),
       scopes: ["https://www.googleapis.com/auth/spreadsheets"]
     });
+
     const sheetsClient = await auth.getClient();
+
+    // ★ これが無かったのが原因（必須）
+    const sheets = google.sheets({ version: "v4", auth: sheetsClient });
 
     const today = getTodayDateString();
 
+    console.log("投稿ログ取得開始");
+
     // 投稿ログを取得して重複チェック
     const postLog = await sheets.spreadsheets.values.get({
-      auth: sheetsClient,
       spreadsheetId: process.env.SHEET_ID,
       range: "投稿ログ!A:C"
     });
 
     const rows = postLog.data.values || [];
     const alreadyExists = rows.some(row => row[0] === today && row[1] === messageId);
+
     if (alreadyExists) {
       console.log("投稿IDは既に記録済みのため、書き込みをスキップします");
       return;
     }
 
+    console.log("投稿ログに書き込み準備:", today, messageId);
+
+    // 投稿ログに追記
     await sheets.spreadsheets.values.append({
-      auth: sheetsClient,
       spreadsheetId: process.env.SHEET_ID,
       range: "投稿ログ!A:C",
       valueInputOption: "USER_ENTERED",
@@ -307,7 +317,7 @@ async function writeTodayMessageIdToSheet(messageId) {
       }
     });
 
-    console.log("投稿IDをスプレッドシートに書き込み:", messageId);
+    console.log("投稿IDをスプレッドシートに書き込み完了:", messageId);
 
   } catch (err) {
     console.error("writeTodayMessageIdToSheet エラー:", err);
