@@ -66,44 +66,61 @@ client.once("ready", () => {
 // ★ 新しいメッセージが投稿された時の処理（GAS対応）
 // ===============================
 client.on("messageCreate", async (message) => {
-   console.log("messageCreate 発火:", message.id, message.author.username);
+  console.log("messageCreate 発火:", message.id, message.author.username);
 
   try {
     // Bot 自身の投稿は無視
-    if (message.author.bot) return;
+    if (message.author.bot) {
+      console.log("Bot 投稿のため無視");
+      return;
+    }
 
     // embed が無い投稿は無視（GAS の投稿は必ず embed 付き）
-    if (!message.embeds || message.embeds.length === 0) return;
+    if (!message.embeds || message.embeds.length === 0) {
+      console.log("embed が無いため無視");
+      return;
+    }
 
     const embed = message.embeds[0];
     const title = embed?.title || "";
+    console.log("受信タイトル:", title);
 
     // 今日の日付（BOT の判定ロジックと同じ）
-    const today = getTodayDateString(); // 2026/01/16
+    const today = getTodayDateString(); 
     const [year, month, day] = today.split("/");
 
-    const key1 = `${parseInt(year)}年${parseInt(month)}月${parseInt(day)}日`; // 2026年1月16日
-    const key2 = `${String(year).slice(-2)}年${month}${day}日`;              // 26年01月16日
-    const key3 = `${parseInt(month)}月${parseInt(day)}日`;                   // 1月16日（旧形式）
+    const key1 = `${parseInt(year)}年${parseInt(month)}月${parseInt(day)}日`;
+    const key2 = `${String(year).slice(-2)}年${month}${day}日`;
+    const key3 = `${parseInt(month)}月${parseInt(day)}日`;
+
+    console.log("期待キー:", key1, "/", key2, "/", key3);
 
     const isTodayPost =
       title.includes(key1) ||
       title.includes(key2) ||
       title.includes(key3);
 
-    if (!isTodayPost) return;
+    console.log("isTodayPost 判定:", isTodayPost);
+
+    if (!isTodayPost) {
+      console.log("→ 今日の投稿ではないため処理終了");
+      return;
+    }
 
     // 今日の投稿として認識
     todayMessageId = message.id;
-    console.log("messageCreate で今日の投稿を検出:", todayMessageId);
+    console.log("今日の投稿を検出:", todayMessageId);
 
     // 投稿ログに書き込み
+    console.log("writeTodayMessageIdToSheet を呼び出します:", todayMessageId);
     await writeTodayMessageIdToSheet(todayMessageId);
 
     // リアクション付与
+    console.log("リアクション付与開始");
     await message.react("🍱");
     await message.react("🍚");
     await message.react("❌");
+    console.log("リアクション付与完了");
 
   } catch (err) {
     console.error("messageCreate エラー:", err);
