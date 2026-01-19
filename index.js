@@ -111,6 +111,22 @@ client.on("messageCreate", async (message) => {
     todayMessageId = message.id;
     console.log("今日の投稿を検出:", todayMessageId);
 
+    if (!isTodayPost) {
+  console.log("→ 今日の投稿ではないため処理終了");
+  return;
+}
+
+// 今日の投稿として認識
+todayMessageId = message.id;
+console.log("今日の投稿を検出:", todayMessageId);
+
+// 締切チェック（ON のときだけ判定）
+if (deadlineCheck === "ON" && isAfterDeadline()) {
+  console.log("締切時間を過ぎているためリアクション拒否");
+  await message.reply("⚠ 締切時間を過ぎているため、リアクション受付できません");
+  return;
+}
+
     // 投稿ログに書き込み
     console.log("writeTodayMessageIdToSheet を呼び出します:", todayMessageId);
     await writeTodayMessageIdToSheet(todayMessageId);
