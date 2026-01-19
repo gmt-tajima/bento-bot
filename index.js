@@ -69,9 +69,9 @@ client.on("messageCreate", async (message) => {
   console.log("messageCreate 発火:", message.id, message.author.username);
 
   try {
-    // Bot 自身の投稿は無視
-    if (message.author.bot) {
-      console.log("Bot 投稿のため無視");
+    // Bot 投稿でも GAS の投稿（embed付き）は処理する
+    if (message.author.bot && (!message.embeds || message.embeds.length === 0)) {
+      console.log("Bot 投稿（embedなし）のため無視");
       return;
     }
 
@@ -86,7 +86,7 @@ client.on("messageCreate", async (message) => {
     console.log("受信タイトル:", title);
 
     // 今日の日付（BOT の判定ロジックと同じ）
-    const today = getTodayDateString(); 
+    const today = getTodayDateString();
     const [year, month, day] = today.split("/");
 
     const key1 = `${parseInt(year)}年${parseInt(month)}月${parseInt(day)}日`;
