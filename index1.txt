@@ -207,23 +207,8 @@ client.on("messageReactionRemove", async (reaction, user) => {
     if (reaction.partial) await reaction.fetch().catch(() => {});
     if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
 
-    // ★ 締切設定を毎回取得
-    ({ deadlineCheck, deadlineTime } = await loadDeadlineSettings());
-
-    if (deadlineCheck === "ON" && isAfterDeadline()) {
-      await reaction.message.react(reaction.emoji.name).catch(() => {});
-
-      const msg = await reaction.message.reply({
-        content: `<@${user.id}> ⚠ 締切後のためキャンセルできません`,
-        allowedMentions: { users: [user.id] }
-      }).catch(() => {});
-
-      setTimeout(() => {
-        msg.delete().catch(() => {});
-      }, 3000);
-
-      return;
-    }
+    // ★ 締切後はキャンセル不可（←ここを削除する）
+    // つまり、締切後でも「ユーザーが自分で外した場合だけ」ログに残す
 
     await handleReactionRemove(reaction, user);
 
