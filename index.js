@@ -192,6 +192,9 @@ async function initializeTodayMessage() {
     const sheetsClient = await auth.getClient();
     const sheets = google.sheets({ version: "v4", auth: sheetsClient });
 
+    // -------------------------------
+    // ① 投稿ログから今日の投稿IDを取得
+    // -------------------------------
     const postLog = await sheets.spreadsheets.values.get({
       auth: sheetsClient,
       spreadsheetId: process.env.SHEET_ID,
@@ -212,25 +215,70 @@ async function initializeTodayMessage() {
 
     console.log("今日の投稿ID:", todayMessageId);
 
-    const settings = await sheets.spreadsheets.values.get({
+    // -------------------------------
+    // ② 設定シートを読み取り（A列=項目, B列=値）
+    // -------------------------------
+    const settingsSheet = await sheets.spreadsheets.values.get({
       auth: sheetsClient,
       spreadsheetId: process.env.SHEET_ID,
-      range: "設定!B1:B6"
+      range: "設定!A1:B20"
     });
 
-    const v = settings.data.values.map(r => r[0]);
+    const settingsRows = settingsSheet.data.values;
 
-    deadlineTime = v[2];      // 締切固定モード（例: "9:00"）
-    deadlineCheck = v[4];     // ON or OFF
+    // 項目名で検索する関数
+    function getSetting(name) {
+      const row = settingsRows.find(r => r[0] === name);
+      return row ? row[1] : null;
+    }
 
-    console.log("締切時刻:", deadlineTime);
+    // 必要な設定値を取得
+    const fixedDeadline = getSetting("締切固定モード");   // 例: "9:00"
+    const deadlineMode  = getSetting("締切モード");        // 任意 / 固定
+    const deadlineCheckSetting = getSetting("締切チェック"); // ON / OFF
+    const optionalMinutes = getSetting("締切任意モード");   // 例: "2"（2時間）
+
+    console.log("設定値 読み取り:");
+    console.log("  締切固定モード:", fixedDeadline);
+    console.log("  締切モード:", deadlineMode);
+    console.log("  締切チェック:", deadlineCheckSetting);
+    console.log("  締切任意モード:", optionalMinutes);
+
+    // -------------------------------
+    // ③ 締切時刻を決定
+    // -------------------------------
+    if (deadlineMode === "固定") {
+      deadlineTime = fixedDeadline; // "9:00"
+    } else {
+      // 任意モード → 投稿時間 + 任意時間
+      const postTime = getSetting("投稿時間"); // "7:00"
+      const [ph, pm] = postTime.split(":").map(Number);
+      const base = new Date();
+      base.setHours(ph);
+      base.setMinutes(pm);
+      base.setSeconds(0);
+
+      const addMinutes = parseFloat(optionalMinutes) * 60;
+      base.setMinutes(base.getMinutes() + addMinutes);
+
+      const hh = String(base.getHours()).padStart(2, "0");
+      const mm = String(base.getMinutes()).padStart(2, "0");
+      deadlineTime = `${hh}:${mm}`;
+    }
+
+    deadlineCheck = deadlineCheckSetting;
+
+    console.log("最終的な締切時刻:", deadlineTime);
     console.log("締切チェック:", deadlineCheck);
 
-    // 締切チェック判定（Date オブジェクト化）
+    // -------------------------------
+    // ④ 締切チェック結果を計算
+    // -------------------------------
     if (deadlineCheck === "ON") {
-      const [hour, minute] = deadlineTime.split(":").map(Number);
+      const [h, m] = deadlineTime.split(":").map(Number);
       const now = new Date();
-      const deadline = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute);
+      const deadline = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
+
       isDeadlinePassed = now > deadline;
       console.log("締切チェック結果:", isDeadlinePassed ? "締切過ぎ" : "受付中");
     } else {
@@ -241,8 +289,7 @@ async function initializeTodayMessage() {
   } catch (err) {
     console.error("initializeTodayMessage エラー:", err);
   }
-}
-　// ===============================
+}// ===============================
 // ★③ 最新投稿から今日の投稿IDを取得（年入りタイトル対応版）
 // ===============================
 async function fetchTodayMessageFromChannel() {
