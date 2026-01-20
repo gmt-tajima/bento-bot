@@ -17,6 +17,7 @@ app.listen(PORT, () => {
 // ② Discord Bot 本体
 // ===============================
 const { Client, GatewayIntentBits, Partials } = require("discord.js");
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -25,10 +26,10 @@ const client = new Client({
     GatewayIntentBits.MessageContent
   ],
   partials: [
-  Partials.Message,
-  Partials.Channel,
-  Partials.Reaction
-]
+    Partials.Message,
+    Partials.Channel,
+    Partials.Reaction
+  ]
 });
 
 // ===============================
@@ -173,6 +174,7 @@ client.on("messageCreate", async (message) => {
 // ===============================
 client.on("messageReactionAdd", async (reaction, user) => {
   console.log("REACTION target:", reaction.message.id, "TODAY:", todayMessageId);
+
   try {
     if (user.bot) return;
     if (reaction.message.id !== todayMessageId) return;
@@ -619,6 +621,11 @@ function isAfterDeadline() {
     0,
     0
   );
+
+  // ★ デバッグログ
+  console.log("DEBUG now:", now);
+  console.log("DEBUG deadline:", deadline);
+  console.log("DEBUG compare now > deadline:", now > deadline);
 
   return now > deadline;
 }
