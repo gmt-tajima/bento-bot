@@ -221,28 +221,34 @@ client.on("messageReactionRemove", async (reaction, user) => {
   try {
     if (user.bot) return;
 
-    // partial 対応
-    if (reaction.partial || reaction.message.partial) {
+    // ★ partial 対応（emoji.name が undefined の場合も fetch）
+    if (
+      reaction.partial ||
+      reaction.message.partial ||
+      !reaction.emoji?.name
+    ) {
       try {
         await reaction.fetch();
         await reaction.message.fetch();
-      } catch (e) {}
+      } catch (e) {
+        console.error("Remove fetch error:", e);
+      }
     }
 
     if (reaction.message.id !== todayMessageId) return;
 
-    // 二重発火防止
+    // ★★★ 二重発火防止（Shard Resume 対策）★★★
     const stillHas = reaction.users.cache.has(user.id);
     if (stillHas) return;
 
-    // 現在のリアクション状態
+    // ★ 現在のリアクション状態を取得
     const current = reaction.message.reactions.cache;
 
     const hasBento = current.get("🍱")?.users.cache.has(user.id);
     const hasRice  = current.get("🍚")?.users.cache.has(user.id);
 
     // ★ キャンセル条件
-    const isCancelEmoji = reaction.emoji.name === "❌";
+    const isCancelEmoji = reaction.emoji?.name === "❌";
     const bothRemoved = !hasBento && !hasRice;
 
     if (isCancelEmoji || bothRemoved) {
