@@ -168,6 +168,7 @@ client.on("messageCreate", async (message) => {
 // ⑤ リアクション追加（注文）
 // ===============================
 client.on("messageReactionAdd", async (reaction, user) => {
+  console.log("REACTION target:", reaction.message.id, "TODAY:", todayMessageId);
   try {
     if (user.bot) return;
     if (reaction.message.id !== todayMessageId) return;
