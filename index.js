@@ -173,12 +173,9 @@ client.on("messageCreate", async (message) => {
 // ⑤ リアクション追加（注文）
 // ===============================
 client.on("messageReactionAdd", async (reaction, user) => {
-  console.log("REACTION target:", reaction.message.id, "TODAY:", todayMessageId);
-
   try {
     if (user.bot) return;
 
-    // partial 対応
     if (reaction.partial || reaction.message.partial) {
       try {
         await reaction.fetch();
@@ -188,25 +185,13 @@ client.on("messageReactionAdd", async (reaction, user) => {
 
     if (reaction.message.id !== todayMessageId) return;
 
-    // ★★★ 二重発火防止（Shard Resume 対策）★★★
-    const already = reaction.users.cache.has(user.id);
-    if (!already) return; // これで「再送イベント」を無視できる
-
-    // 締切設定取得
-    ({ deadlineCheck, deadlineTime } = await loadDeadlineSettings());
-
-    if (deadlineCheck === "ON" && isAfterDeadline()) {
-      await reaction.users.remove(user.id).catch(() => {});
-
-      const msg = await reaction.message.reply({
-        content: `<@${user.id}> ⚠ 締切時間を過ぎているため、注文は受付できません`,
-        allowedMentions: { users: [user.id] }
-      }).catch(() => {});
-
-      setTimeout(() => msg.delete().catch(() => {}), 3000);
+    // ★ キャンセル（❌）を押した瞬間にキャンセル扱い
+    if (reaction.emoji.name === "❌") {
+      await handleReactionRemove(reaction, user);
       return;
     }
 
+    // ここから先は既存の「おかず」「ごはん」の処理
     await handleReactionAdd(reaction, user);
 
   } catch (err) {
