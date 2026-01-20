@@ -177,10 +177,16 @@ client.on("messageReactionAdd", async (reaction, user) => {
 
   try {
     if (user.bot) return;
-    if (reaction.message.id !== todayMessageId) return;
 
-    if (reaction.partial) await reaction.fetch().catch(() => {});
-    if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
+    // ★ partial をまとめてフェッチ（これで二重発火を防ぐ）
+    if (reaction.partial || reaction.message.partial) {
+      try {
+        await reaction.fetch();
+        await reaction.message.fetch();
+      } catch (e) {}
+    }
+
+    if (reaction.message.id !== todayMessageId) return;
 
     // ★ 締切設定を毎回取得
     ({ deadlineCheck, deadlineTime } = await loadDeadlineSettings());
@@ -213,14 +219,18 @@ client.on("messageReactionAdd", async (reaction, user) => {
 client.on("messageReactionRemove", async (reaction, user) => {
   try {
     if (user.bot) return;
+
+    // ★ partial をまとめてフェッチ（Add と同じ）
+    if (reaction.partial || reaction.message.partial) {
+      try {
+        await reaction.fetch();
+        await reaction.message.fetch();
+      } catch (e) {}
+    }
+
     if (reaction.message.id !== todayMessageId) return;
 
-    if (reaction.partial) await reaction.fetch().catch(() => {});
-    if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
-
-    // 締切チェックは不要（Add 側で済ませている）
-    // Remove 側は「ユーザーが自分で外したときだけ」ログを残す
-
+    // Remove は締切チェック不要
     await handleReactionRemove(reaction, user);
 
   } catch (err) {
@@ -622,7 +632,6 @@ function isAfterDeadline() {
     0
   );
 
-  // ★ デバッグログ
   console.log("DEBUG now:", now);
   console.log("DEBUG deadline:", deadline);
   console.log("DEBUG compare now > deadline:", now > deadline);
