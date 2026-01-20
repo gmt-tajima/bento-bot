@@ -220,7 +220,7 @@ client.on("messageReactionRemove", async (reaction, user) => {
   try {
     if (user.bot) return;
 
-    // ★ partial をまとめてフェッチ（Add と同じ）
+    // partial 対応
     if (reaction.partial || reaction.message.partial) {
       try {
         await reaction.fetch();
@@ -230,8 +230,16 @@ client.on("messageReactionRemove", async (reaction, user) => {
 
     if (reaction.message.id !== todayMessageId) return;
 
-    // Remove は締切チェック不要
-    await handleReactionRemove(reaction, user);
+    // ★ 現在のリアクション状態を取得
+    const currentReactions = reaction.message.reactions.cache;
+
+    const hasRice = currentReactions.get("🍚")?.users.cache.has(user.id);
+    const hasBento = currentReactions.get("🍱")?.users.cache.has(user.id);
+
+    // ★ どちらも付いていなければキャンセル扱い
+    if (!hasRice && !hasBento) {
+      await handleReactionRemove(reaction, user);
+    }
 
   } catch (err) {
     console.error("messageReactionRemove エラー:", err);
@@ -595,6 +603,9 @@ async function writeReactionLog(data) {
   }
 }
 
+// ===============================
+// 締切判定（JST補正版）
+// ===============================
 // ===============================
 // 締切判定（JST補正版）
 // ===============================
