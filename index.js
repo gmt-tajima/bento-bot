@@ -582,6 +582,7 @@ async function writeReactionLog(data) {
 // 締切判定
 // ===============================
 function isAfterDeadline() {
+  console.log("DEBUG deadlineTime:", deadlineTime);
   if (!deadlineTime) return false;
 
   let clean = deadlineTime;
