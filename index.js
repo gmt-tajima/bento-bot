@@ -177,21 +177,39 @@ client.on("messageReactionAdd", async (reaction, user) => {
     if (user.bot) return;
 
     if (reaction.partial || reaction.message.partial) {
-      try {
-        await reaction.fetch();
-        await reaction.message.fetch();
-      } catch (e) {}
+      await reaction.fetch().catch(() => {});
+      await reaction.message.fetch().catch(() => {});
     }
 
     if (reaction.message.id !== todayMessageId) return;
 
-    // ★ ここでは「おかず」「ごはん」の注文処理だけ行う
+    const emoji = reaction.emoji.name;
+
+    // ★ キャンセル（❌）を押した瞬間にキャンセルログだけ書く
+    if (emoji === "❌") {
+      const member = await findMember(user.id);
+      if (!member) return;
+
+      await writeReactionLog({
+        discordId: user.id,
+        name: member.name,
+        internalId: member.internalId,
+        place: member.place,
+        type: emoji,
+        status: "キャンセル"
+      });
+
+      return; // Add ではリアクション外さない
+    }
+
+    // ★ おかず・ごはんの注文処理
     await handleReactionAdd(reaction, user);
 
   } catch (err) {
     console.error("messageReactionAdd エラー:", err);
   }
 });
+
 // ===============================
 // ⑥ リアクション削除（キャンセル）
 // ===============================
@@ -199,33 +217,22 @@ client.on("messageReactionRemove", async (reaction, user) => {
   try {
     if (user.bot) return;
 
-    // ★ partial 対応（emoji.name が undefined の場合も fetch）
-    if (
-      reaction.partial ||
-      reaction.message.partial ||
-      !reaction.emoji?.name
-    ) {
-      try {
-        await reaction.fetch();
-        await reaction.message.fetch();
-      } catch (e) {
-        console.error("Remove fetch error:", e);
-      }
+    if (reaction.partial || reaction.message.partial || !reaction.emoji?.name) {
+      await reaction.fetch().catch(() => {});
+      await reaction.message.fetch().catch(() => {});
     }
 
     if (reaction.message.id !== todayMessageId) return;
 
-    // ★★★ 二重発火防止（Shard Resume 対策）★★★
+    // 自分のリアクションがまだ残っているなら処理しない
     const stillHas = reaction.users.cache.has(user.id);
     if (stillHas) return;
 
-    // ★ 現在のリアクション状態を取得
     const current = reaction.message.reactions.cache;
 
     const hasBento = current.get("🍱")?.users.cache.has(user.id);
     const hasRice  = current.get("🍚")?.users.cache.has(user.id);
 
-    // ★ キャンセル条件
     const isCancelEmoji = reaction.emoji?.name === "❌";
     const bothRemoved = !hasBento && !hasRice;
 
@@ -476,21 +483,17 @@ async function handleReactionRemove(reaction, user) {
     if (reaction.message.id !== todayMessageId) return;
 
     const emoji = reaction.emoji.name;
-
     const member = await findMember(user.id);
     if (!member) return;
 
-    // ★★★ キャンセル時に必ずリアクションを外す ★★★
     const msg = reaction.message;
 
-    // おかず
+    // ★ 注文者のリアクションだけ外す
     await msg.reactions.cache.get("🍱")?.users.remove(user.id).catch(() => {});
-    // ごはん
     await msg.reactions.cache.get("🍚")?.users.remove(user.id).catch(() => {});
-    // キャンセル
     await msg.reactions.cache.get("❌")?.users.remove(user.id).catch(() => {});
 
-    // ★★★ ログ書き込み ★★★
+    // ★ キャンセルログ
     await writeReactionLog({
       discordId: user.id,
       name: member.name,
@@ -504,7 +507,6 @@ async function handleReactionRemove(reaction, user) {
     console.error("handleReactionRemove エラー:", err);
   }
 }
-
 // ===============================
 // 名簿照合
 // ===============================
