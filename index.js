@@ -216,12 +216,12 @@ client.on("messageReactionAdd", async (reaction, user) => {
 
 // ===============================
 // ⑥ リアクション削除（キャンセル）
-// ===============================
+
 client.on("messageReactionRemove", async (reaction, user) => {
   try {
     if (user.bot) return;
 
-    // partial 対応
+    // ★ partial 対応（Add と同じ形）
     if (reaction.partial || reaction.message.partial) {
       try {
         await reaction.fetch();
@@ -231,14 +231,18 @@ client.on("messageReactionRemove", async (reaction, user) => {
 
     if (reaction.message.id !== todayMessageId) return;
 
-    // ★ 現在のリアクション状態を取得
-    const currentReactions = reaction.message.reactions.cache;
+    // ★★★ 二重発火防止（Shard Resume 対策）★★★
+    const stillHas = reaction.users.cache.has(user.id);
+    if (stillHas) return; // Remove の再送イベントを無視
 
-    const hasRice = currentReactions.get("🍚")?.users.cache.has(user.id);
-    const hasBento = currentReactions.get("🍱")?.users.cache.has(user.id);
+    // ★ 現在のリアクション状態を取得
+    const current = reaction.message.reactions.cache;
+
+    const hasBento = current.get("🍱")?.users.cache.has(user.id);
+    const hasRice  = current.get("🍚")?.users.cache.has(user.id);
 
     // ★ どちらも付いていなければキャンセル扱い
-    if (!hasRice && !hasBento) {
+    if (!hasBento && !hasRice) {
       await handleReactionRemove(reaction, user);
     }
 
