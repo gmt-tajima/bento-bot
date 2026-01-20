@@ -596,7 +596,7 @@ async function writeReactionLog(data) {
 }
 
 // ===============================
-// 締切判定
+// 締切判定（JST補正版）
 // ===============================
 function isAfterDeadline() {
   console.log("DEBUG deadlineTime:", deadlineTime);
@@ -604,6 +604,7 @@ function isAfterDeadline() {
 
   let clean = deadlineTime;
 
+  // Date型なら "HH:MM" に変換
   if (clean instanceof Date) {
     const h = clean.getHours().toString().padStart(2, "0");
     const m = clean.getMinutes().toString().padStart(2, "0");
@@ -621,19 +622,25 @@ function isAfterDeadline() {
     return false;
   }
 
+  // 現在時刻（JST）
   const now = new Date();
+
+  // ★ JST の deadline を作る（UTC補正）
   const deadline = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    h,
-    m,
-    0,
-    0
+    Date.UTC(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      h - 9,   // JST → UTC 補正
+      m,
+      0,
+      0
+    )
   );
 
+  // ★ デバッグログ
   console.log("DEBUG now:", now);
-  console.log("DEBUG deadline:", deadline);
+  console.log("DEBUG deadline (JST):", deadline);
   console.log("DEBUG compare now > deadline:", now > deadline);
 
   return now > deadline;
