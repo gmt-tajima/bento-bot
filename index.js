@@ -185,23 +185,16 @@ client.on("messageReactionAdd", async (reaction, user) => {
 
     if (reaction.message.id !== todayMessageId) return;
 
-    // ★ キャンセル（❌）を押した瞬間にキャンセル扱い
-    if (reaction.emoji.name === "❌") {
-      await handleReactionRemove(reaction, user);
-      return;
-    }
-
-    // ここから先は既存の「おかず」「ごはん」の処理
+    // ★ ここでは「おかず」「ごはん」の注文処理だけ行う
     await handleReactionAdd(reaction, user);
 
   } catch (err) {
     console.error("messageReactionAdd エラー:", err);
   }
 });
-
 // ===============================
 // ⑥ リアクション削除（キャンセル）
-
+// ===============================
 client.on("messageReactionRemove", async (reaction, user) => {
   try {
     if (user.bot) return;
