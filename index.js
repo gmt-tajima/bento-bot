@@ -221,7 +221,7 @@ client.on("messageReactionRemove", async (reaction, user) => {
   try {
     if (user.bot) return;
 
-    // ★ partial 対応（Add と同じ形）
+    // partial 対応
     if (reaction.partial || reaction.message.partial) {
       try {
         await reaction.fetch();
@@ -231,18 +231,21 @@ client.on("messageReactionRemove", async (reaction, user) => {
 
     if (reaction.message.id !== todayMessageId) return;
 
-    // ★★★ 二重発火防止（Shard Resume 対策）★★★
+    // 二重発火防止
     const stillHas = reaction.users.cache.has(user.id);
-    if (stillHas) return; // Remove の再送イベントを無視
+    if (stillHas) return;
 
-    // ★ 現在のリアクション状態を取得
+    // 現在のリアクション状態
     const current = reaction.message.reactions.cache;
 
     const hasBento = current.get("🍱")?.users.cache.has(user.id);
     const hasRice  = current.get("🍚")?.users.cache.has(user.id);
 
-    // ★ どちらも付いていなければキャンセル扱い
-    if (!hasBento && !hasRice) {
+    // ★ キャンセル条件
+    const isCancelEmoji = reaction.emoji.name === "❌";
+    const bothRemoved = !hasBento && !hasRice;
+
+    if (isCancelEmoji || bothRemoved) {
       await handleReactionRemove(reaction, user);
     }
 
