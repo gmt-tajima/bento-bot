@@ -480,6 +480,17 @@ async function handleReactionRemove(reaction, user) {
     const member = await findMember(user.id);
     if (!member) return;
 
+    // ★★★ キャンセル時に必ずリアクションを外す ★★★
+    const msg = reaction.message;
+
+    // おかず
+    await msg.reactions.cache.get("🍱")?.users.remove(user.id).catch(() => {});
+    // ごはん
+    await msg.reactions.cache.get("🍚")?.users.remove(user.id).catch(() => {});
+    // キャンセル
+    await msg.reactions.cache.get("❌")?.users.remove(user.id).catch(() => {});
+
+    // ★★★ ログ書き込み ★★★
     await writeReactionLog({
       discordId: user.id,
       name: member.name,
