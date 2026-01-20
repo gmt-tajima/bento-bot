@@ -185,11 +185,19 @@ client.on("messageReactionAdd", async (reaction, user) => {
 
     const emoji = reaction.emoji.name;
 
-    // ★ キャンセル（❌）を押した瞬間にキャンセルログだけ書く
+    // ★ キャンセル（❌）を押した瞬間にキャンセル処理を実行
     if (emoji === "❌") {
       const member = await findMember(user.id);
       if (!member) return;
 
+      const msg = reaction.message;
+
+      // 注文者のリアクションをすべて外す
+      await msg.reactions.cache.get("🍱")?.users.remove(user.id).catch(() => {});
+      await msg.reactions.cache.get("🍚")?.users.remove(user.id).catch(() => {});
+      await msg.reactions.cache.get("❌")?.users.remove(user.id).catch(() => {});
+
+      // キャンセルログ
       await writeReactionLog({
         discordId: user.id,
         name: member.name,
@@ -199,7 +207,7 @@ client.on("messageReactionAdd", async (reaction, user) => {
         status: "キャンセル"
       });
 
-      return; // Add ではリアクション外さない
+      return; // Add 側はここで終了
     }
 
     // ★ おかず・ごはんの注文処理
@@ -209,7 +217,6 @@ client.on("messageReactionAdd", async (reaction, user) => {
     console.error("messageReactionAdd エラー:", err);
   }
 });
-
 // ===============================
 // ⑥ リアクション削除（キャンセル）
 // ===============================
@@ -223,10 +230,6 @@ client.on("messageReactionRemove", async (reaction, user) => {
     }
 
     if (reaction.message.id !== todayMessageId) return;
-
-    // 自分のリアクションがまだ残っているなら処理しない
-    const stillHas = reaction.users.cache.has(user.id);
-    if (stillHas) return;
 
     const current = reaction.message.reactions.cache;
 
@@ -244,7 +247,6 @@ client.on("messageReactionRemove", async (reaction, user) => {
     console.error("messageReactionRemove エラー:", err);
   }
 });
-
 // ===============================
 // Discord 接続状態ログ
 // ===============================
@@ -488,12 +490,12 @@ async function handleReactionRemove(reaction, user) {
 
     const msg = reaction.message;
 
-    // ★ 注文者のリアクションだけ外す
+    // 念のためもう一度外す（Add 側で外れているので基本的に何も起きない）
     await msg.reactions.cache.get("🍱")?.users.remove(user.id).catch(() => {});
     await msg.reactions.cache.get("🍚")?.users.remove(user.id).catch(() => {});
     await msg.reactions.cache.get("❌")?.users.remove(user.id).catch(() => {});
 
-    // ★ キャンセルログ
+    // キャンセルログ
     await writeReactionLog({
       discordId: user.id,
       name: member.name,
