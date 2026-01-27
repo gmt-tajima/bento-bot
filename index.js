@@ -208,10 +208,12 @@ client.on("messageReactionAdd", async (reaction, user) => {
     // ★ 締切チェック（キャンセル以外）
     // ===============================
     if (emoji !== "❌") {
-      const { deadlineTime, deadlineCheck } = await loadDeadlineSettings();
+     const settings = await loadDeadlineSettings();
+deadlineTime = settings.deadlineTime;
+deadlineCheck = settings.deadlineCheck;
 
-      if (deadlineCheck === "ON") {
-        if (isAfterDeadline(deadlineTime)) {
+if (deadlineCheck === "ON") {
+  if (isAfterDeadline()) {
           console.log("締切後のためリアクション拒否:", emoji);
           await reaction.users.remove(user.id).catch(() => {});
           return;
