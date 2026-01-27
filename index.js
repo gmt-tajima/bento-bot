@@ -248,7 +248,7 @@ client.on("messageReactionAdd", async (reaction, user) => {
   } catch (err) {
     console.error("messageReactionAdd エラー:", err);
   }
-}); ★ client.on("messageReactionAdd") の閉じ
+}); 
 
     // ===============================
     // ★ キャンセル（❌）
