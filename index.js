@@ -164,6 +164,10 @@ client.on("messageCreate", async (message) => {
 
     // 今日の投稿として認識
     todayMessageId = message.id;
+// ★ 締切設定を読み込んでグローバルに反映
+const settings = await loadDeadlineSettings();
+deadlineTime = settings.deadlineTime;
+deadlineCheck = settings.deadlineCheck;
 
     // 締切チェック
     if (deadlineCheck === "ON" && isAfterDeadline()) {
