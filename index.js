@@ -83,7 +83,7 @@ async function loadDeadlineSettings() {
   }
 
   const fixedDeadline = getSetting("締切固定モード");
-  const deadlineMode = getSetting("締切モード");
+  const deadlineMode = String(getSetting("締切モード")).trim();
   const deadlineCheckSetting = getSetting("締切チェック");
   const optionalMinutes = getSetting("締切任意モード");
 
