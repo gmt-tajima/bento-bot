@@ -185,7 +185,28 @@ client.on("messageReactionAdd", async (reaction, user) => {
 
     const emoji = reaction.emoji.name;
 
-    // ★ キャンセル（❌）を押した瞬間にキャンセル処理を実行
+    // ===============================
+    // ★ 締切チェック（キャンセル以外）
+    // ===============================
+    if (emoji !== "❌") {
+      const { deadlineTime, deadlineCheck } = await loadDeadlineSettings();
+
+      if (deadlineCheck === "ON") {
+        if (isAfterDeadline(deadlineTime)) {
+          console.log("締切後のためリアクション拒否:", emoji);
+
+          // 締切後に押されたリアクションは即座に外す
+          await reaction.users.remove(user.id).catch(() => {});
+
+          // 必要なら DM 送信なども可能（今は何もしない）
+          return;
+        }
+      }
+    }
+
+    // ===============================
+    // ★ キャンセル（❌）
+    // ===============================
     if (emoji === "❌") {
       const member = await findMember(user.id);
       if (!member) return;
@@ -207,16 +228,19 @@ client.on("messageReactionAdd", async (reaction, user) => {
         status: "キャンセル"
       });
 
-      return; // Add 側はここで終了
+      return;
     }
 
+    // ===============================
     // ★ おかず・ごはんの注文処理
+    // ===============================
     await handleReactionAdd(reaction, user);
 
   } catch (err) {
     console.error("messageReactionAdd エラー:", err);
   }
 });
+
 // ===============================
 // ⑥ リアクション削除（キャンセル）
 // ===============================
@@ -231,12 +255,35 @@ client.on("messageReactionRemove", async (reaction, user) => {
 
     if (reaction.message.id !== todayMessageId) return;
 
+    const emoji = reaction.emoji.name;
+
+    // ===============================
+    // ★ 締切チェック（キャンセル以外）
+    // ===============================
+    if (emoji !== "❌") {
+      const { deadlineTime, deadlineCheck } = await loadDeadlineSettings();
+
+      if (deadlineCheck === "ON") {
+        if (isAfterDeadline(deadlineTime)) {
+          console.log("締切後のためリアクション削除を拒否:", emoji);
+
+          // 外されたリアクションを元に戻す
+          await reaction.message.react(emoji).catch(() => {});
+
+          return;
+        }
+      }
+    }
+
+    // ===============================
+    // ★ 通常の削除処理
+    // ===============================
     const current = reaction.message.reactions.cache;
 
     const hasBento = current.get("🍱")?.users.cache.has(user.id);
     const hasRice  = current.get("🍚")?.users.cache.has(user.id);
 
-    const isCancelEmoji = reaction.emoji?.name === "❌";
+    const isCancelEmoji = emoji === "❌";
     const bothRemoved = !hasBento && !hasRice;
 
     if (isCancelEmoji || bothRemoved) {
@@ -247,6 +294,7 @@ client.on("messageReactionRemove", async (reaction, user) => {
     console.error("messageReactionRemove エラー:", err);
   }
 });
+
 // ===============================
 // Discord 接続状態ログ
 // ===============================
