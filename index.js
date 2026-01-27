@@ -90,14 +90,14 @@ async function loadDeadlineSettings() {
   let deadlineTime;
 
   if (deadlineMode === "固定") {
-    deadlineTime = fixedDeadline;
-  } else {
-    const postTime = getSetting("投稿時間");
-    const [ph, pm] = postTime.split(":").map(Number);
-    const base = new Date();
-    base.setHours(ph);
-    base.setMinutes(pm);
-    base.setSeconds(0);
+  // fixedDeadline は "9:00" などの文字列として取得される
+  const [h, m] = String(fixedDeadline).split(":").map(Number);
+  const base = new Date();
+  base.setHours(h);
+  base.setMinutes(m);
+  base.setSeconds(0);
+  deadlineTime = base;
+}
 
     const addMinutes = parseFloat(optionalMinutes) * 60;
     base.setMinutes(base.getMinutes() + addMinutes);
