@@ -89,15 +89,29 @@ async function loadDeadlineSettings() {
 
   let deadlineTime;
 
+  // ===============================
+  // 固定モード
+  // ===============================
   if (deadlineMode === "固定") {
-  // fixedDeadline は "9:00" などの文字列として取得される
-  const [h, m] = String(fixedDeadline).split(":").map(Number);
-  const base = new Date();
-  base.setHours(h);
-  base.setMinutes(m);
-  base.setSeconds(0);
-  deadlineTime = base;
-}
+    const [h, m] = String(fixedDeadline).split(":").map(Number);
+    const base = new Date();
+    base.setHours(h);
+    base.setMinutes(m);
+    base.setSeconds(0);
+    deadlineTime = base;
+  }
+
+  // ===============================
+  // 任意モード
+  // ===============================
+  else {
+    const postTime = getSetting("投稿時間");
+    const [ph, pm] = postTime.split(":").map(Number);
+
+    const base = new Date();
+    base.setHours(ph);
+    base.setMinutes(pm);
+    base.setSeconds(0);
 
     const addMinutes = parseFloat(optionalMinutes) * 60;
     base.setMinutes(base.getMinutes() + addMinutes);
@@ -111,7 +125,7 @@ async function loadDeadlineSettings() {
     deadlineTime,
     deadlineCheck: deadlineCheckSetting
   };
-
+}
 
 // ===============================
 // ④ Bot 起動時
