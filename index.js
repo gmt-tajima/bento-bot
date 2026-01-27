@@ -208,7 +208,6 @@ client.on("messageReactionAdd", async (reaction, user) => {
       if (deadlineCheck === "ON") {
         if (isAfterDeadline(deadlineTime)) {
           console.log("締切後のためリアクション拒否:", emoji);
-
           await reaction.users.remove(user.id).catch(() => {});
           return;
         }
@@ -247,7 +246,8 @@ client.on("messageReactionAdd", async (reaction, user) => {
 
   } catch (err) {
     console.error("messageReactionAdd エラー:", err);
-  
+  }
+});  
 
     // ===============================
     // ★ キャンセル（❌）
