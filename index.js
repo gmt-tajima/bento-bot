@@ -126,6 +126,7 @@ return {
   deadlineTime,
   deadlineCheck: deadlineCheckSetting
 };
+}
 
 // ===============================
 // ④ Bot 起動時
