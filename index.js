@@ -91,43 +91,41 @@ async function loadDeadlineSettings() {
 
   let deadlineTime;
 
-  // ===============================
-  // 固定モード
-  // ===============================
-  if (deadlineMode === "固定") {
-    const [h, m] = String(fixedDeadline).split(":").map(Number);
-    const base = new Date();
-    base.setHours(h);
-    base.setMinutes(m);
-    base.setSeconds(0);
-    deadlineTime = base;
-  }
-
-  // ===============================
-  // 任意モード
-  // ===============================
-  else {
-    const postTime = getSetting("投稿時間");
-    const [ph, pm] = postTime.split(":").map(Number);
-
-    const base = new Date();
-    base.setHours(ph);
-    base.setMinutes(pm);
-    base.setSeconds(0);
-
-    const addMinutes = parseFloat(optionalMinutes) * 60;
-    base.setMinutes(base.getMinutes() + addMinutes);
-
-    const hh = String(base.getHours()).padStart(2, "0");
-    const mm = String(base.getMinutes()).padStart(2, "0");
-    deadlineTime = `${hh}:${mm}`;
-  }
-
-  return {
-    deadlineTime,
-    deadlineCheck: deadlineCheckSetting
-  };
+// ===============================
+// 固定モード
+// ===============================
+if (deadlineMode === "固定") {
+  const [h, m] = String(fixedDeadline).split(":").map(Number);
+  const base = new Date();
+  base.setHours(h);
+  base.setMinutes(m);
+  base.setSeconds(0);
+  deadlineTime = base;
 }
+
+// ===============================
+// 任意モード
+// ===============================
+else {
+  const postTime = getSetting("投稿時間");
+  const [ph, pm] = postTime.split(":").map(Number);
+
+  const base = new Date();
+  base.setHours(ph);
+  base.setMinutes(pm);
+  base.setSeconds(0);
+
+  const addMinutes = parseFloat(optionalMinutes) * 60;
+  base.setMinutes(base.getMinutes() + addMinutes);
+
+  // ★ Date 型で返す
+  deadlineTime = base;
+}
+
+return {
+  deadlineTime,
+  deadlineCheck: deadlineCheckSetting
+};
 
 // ===============================
 // ④ Bot 起動時
