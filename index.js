@@ -209,18 +209,46 @@ client.on("messageReactionAdd", async (reaction, user) => {
         if (isAfterDeadline(deadlineTime)) {
           console.log("締切後のためリアクション拒否:", emoji);
 
-          // 締切後に押されたリアクションは即座に外す
           await reaction.users.remove(user.id).catch(() => {});
-
-          // 必要なら DM 送信なども可能（今は何もしない）
           return;
         }
       }
     }
-      } catch (err) {
+
+    // ===============================
+    // ★ キャンセル（❌）
+    // ===============================
+    if (emoji === "❌") {
+      const member = await findMember(user.id);
+      if (!member) return;
+
+      const msg = reaction.message;
+
+      await msg.reactions.cache.get("🍱")?.users.remove(user.id).catch(() => {});
+      await msg.reactions.cache.get("🍚")?.users.remove(user.id).catch(() => {});
+      await msg.reactions.cache.get("❌")?.users.remove(user.id).catch(() => {});
+
+      await writeReactionLog({
+        discordId: user.id,
+        name: member.name,
+        internalId: member.internalId,
+        place: member.place,
+        type: emoji,
+        status: "キャンセル"
+      });
+
+      return;
+    }
+
+    // ===============================
+    // ★ おかず・ごはんの注文処理
+    // ===============================
+    await handleReactionAdd(reaction, user);
+
+  } catch (err) {
     console.error("messageReactionAdd エラー:", err);
   }
-}); // ★ client.on("messageReactionAdd") の閉じ
+}); ★ client.on("messageReactionAdd") の閉じ
 
     // ===============================
     // ★ キャンセル（❌）
