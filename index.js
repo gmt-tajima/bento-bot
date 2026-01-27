@@ -249,42 +249,6 @@ client.on("messageReactionAdd", async (reaction, user) => {
   }
 });  
 
-    // ===============================
-    // ★ キャンセル（❌）
-    // ===============================
-    if (emoji === "❌") {
-      const member = await findMember(user.id);
-      if (!member) return;
-
-      const msg = reaction.message;
-
-      // 注文者のリアクションをすべて外す
-      await msg.reactions.cache.get("🍱")?.users.remove(user.id).catch(() => {});
-      await msg.reactions.cache.get("🍚")?.users.remove(user.id).catch(() => {});
-      await msg.reactions.cache.get("❌")?.users.remove(user.id).catch(() => {});
-
-      // キャンセルログ
-      await writeReactionLog({
-        discordId: user.id,
-        name: member.name,
-        internalId: member.internalId,
-        place: member.place,
-        type: emoji,
-        status: "キャンセル"
-      });
-
-      return;
-    }
-
-    // ===============================
-    // ★ おかず・ごはんの注文処理
-    // ===============================
-    await handleReactionAdd(reaction, user);
-
-  } catch (err) {
-    console.error("messageReactionAdd エラー:", err);
-  }
-});
 
 // ===============================
 // ⑥ リアクション削除（キャンセル）
