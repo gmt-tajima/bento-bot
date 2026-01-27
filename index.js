@@ -162,19 +162,19 @@ client.on("messageCreate", async (message) => {
 
     if (!isTodayPost) return;
 
-    // 今日の投稿として認識
-    todayMessageId = message.id;
+   // 今日の投稿として認識
+todayMessageId = message.id;
+
 // ★ 締切設定を読み込んでグローバルに反映
 const settings = await loadDeadlineSettings();
 deadlineTime = settings.deadlineTime;
 deadlineCheck = settings.deadlineCheck;
 
-    // 締切チェック
-    if (deadlineCheck === "ON" && isAfterDeadline()) {
-      await message.reply("⚠ 締切時間を過ぎているため、リアクション受付できません");
-      return;
-    }
-
+// 締切チェック
+if (deadlineCheck === "ON" && isAfterDeadline()) {
+  await message.reply("⚠ 締切時間を過ぎているため、リアクション受付できません");
+  return;
+}
     // 投稿ログに書き込み
     await writeTodayMessageIdToSheet(todayMessageId);
 
