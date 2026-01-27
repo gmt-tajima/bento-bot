@@ -111,7 +111,7 @@ async function loadDeadlineSettings() {
     deadlineTime,
     deadlineCheck: deadlineCheckSetting
   };
-}
+
 
 // ===============================
 // ④ Bot 起動時
