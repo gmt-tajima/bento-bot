@@ -192,17 +192,32 @@ if (deadlineCheck === "ON" && isAfterDeadline()) {
 // ⑤ リアクション追加（注文）
 // ===============================
 client.on("messageReactionAdd", async (reaction, user) => {
-  try {
-    if (user.bot) return;
 
-    if (reaction.partial || reaction.message.partial) {
-      await reaction.fetch().catch(() => {});
-      await reaction.message.fetch().catch(() => {});
-    }
+try {
 
-    if (reaction.message.id !== todayMessageId) return;
+if (reaction.partial || reaction.message.partial) {
+  await reaction.fetch().catch(() => {});
+  await reaction.message.fetch().catch(() => {});
+}
 
-    const emoji = reaction.emoji.name;
+const emoji = reaction.emoji.name;
+
+// ===============================
+// ★ 過去投稿チェック（常に拒否）
+// ===============================
+if (reaction.message.id !== todayMessageId) {
+  console.log("過去投稿へのリアクションを拒否:", emoji);
+
+  // リアクションを即削除
+  await reaction.users.remove(user.id).catch(() => {});
+
+  // DM 通知
+  await user.send(
+    "⚠ 過去の投稿にはリアクションできません。注文は当日の投稿に対して行ってください。"
+  ).catch(() => {});
+
+  return;
+}
 
     // ===============================
     // ★ 締切チェック（キャンセル以外）
@@ -286,7 +301,7 @@ client.on("messageReactionRemove", async (reaction, user) => {
     const emoji = reaction.emoji.name;
 
     // ===============================
-    // ★ 過去投稿チェック（キャンセルも対象）
+    // ★ 過去投稿チェック（常に拒否）
     // ===============================
     if (reaction.message.id !== todayMessageId) {
       console.log("過去投稿へのリアクション削除を拒否:", emoji);
@@ -303,34 +318,39 @@ client.on("messageReactionRemove", async (reaction, user) => {
     }
 
     // ===============================
-    // ★ 締切チェック（キャンセル以外）
-    // ===============================
-    if (emoji !== "❌") {
-      const { deadlineTime, deadlineCheck } = await loadDeadlineSettings();
-
-      if (deadlineCheck === "ON") {
-        if (isAfterDeadline(deadlineTime)) {
-          console.log("締切後のためリアクション削除を拒否:", emoji);
-
-          // 外されたリアクションを元に戻す
-          await reaction.message.react(emoji).catch(() => {});
-
-          return;
-        }
-      }
-    }
-
-    // ===============================
     // ★ キャンセル処理（❌）
     // ===============================
     if (emoji === "❌") {
       console.log("キャンセル処理開始:", user.username);
 
-      // ログから注文を削除
-      await removeReactionLog(user.id).catch(() => {});
+      const member = await findMember(user.id);
+      if (!member) return;
+
+      const msg = reaction.message;
+
+      // おかず・ごはん・❌ を全部外す
+      await msg.reactions.cache.get("🍱")?.users.remove(user.id).catch(() => {});
+      await msg.reactions.cache.get("🍚")?.users.remove(user.id).catch(() => {});
+      await msg.reactions.cache.get("❌")?.users.remove(user.id).catch(() => {});
+
+      // ログ書き込み
+      await writeReactionLog({
+        discordId: user.id,
+        name: member.name,
+        internalId: member.internalId,
+        place: member.place,
+        type: emoji,
+        status: "キャンセル"
+      });
 
       console.log("キャンセル処理完了:", user.username);
+      return;
     }
+
+    // ===============================
+    // ★ 当日の投稿：🍱🍚 の削除は何もしない
+    // ===============================
+    return;
 
   } catch (err) {
     console.error("messageReactionRemove エラー:", err);
