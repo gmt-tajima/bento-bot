@@ -300,22 +300,25 @@ client.on("messageReactionRemove", async (reaction, user) => {
 
     const emoji = reaction.emoji.name;
 
-    // ===============================
-    // ★ 過去投稿チェック（常に拒否）
-    // ===============================
-    if (reaction.message.id !== todayMessageId) {
-      console.log("過去投稿へのリアクション削除を拒否:", emoji);
+   // ===============================
+// ★ 過去投稿チェック（常に拒否）
+// ===============================
+if (reaction.message.id !== todayMessageId) {
+  console.log("過去投稿へのリアクション削除を拒否:", emoji);
 
-      // 外されたリアクションを元に戻す
-      await reaction.message.react(emoji).catch(() => {});
+  // 外されたリアクションをユーザー本人として復活
+  await reaction.message.reactions.cache
+    .get(emoji)
+    ?.users.add(user.id)
+    .catch(() => {});
 
-      // 本人にだけ通知
-      await user.send(
-        "⚠ 過去の投稿にはリアクションできません。注文は当日の投稿に対して行ってください。"
-      ).catch(() => {});
+  // 本人にだけ通知
+  await user.send(
+    "⚠ 過去の投稿にはリアクションできません。注文は当日の投稿に対して行ってください。"
+  ).catch(() => {});
 
-      return;
-    }
+  return;
+}
 
     // ===============================
     // ★ キャンセル処理（❌）
