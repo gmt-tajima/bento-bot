@@ -204,10 +204,17 @@ client.on("messageReactionAdd", async (reaction, user) => {
 
     const emoji = reaction.emoji.name;
 
-       // ===============================
+    // ===============================
     // ★ 締切チェック（キャンセル以外）
     // ===============================
     if (emoji !== "❌") {
+      if (reaction.message.id !== todayMessageId) {
+  console.log("過去投稿へのリアクションを拒否:", emoji);
+  await reaction.users.remove(user.id).catch(() => {});
+  await user.send("⚠ 過去の投稿にはリアクションできません。注文は当日の投稿に対して行ってください。").catch(() => {});
+  return;
+}
+      // 締切チェック
       const settings = await loadDeadlineSettings();
       deadlineTime = settings.deadlineTime;
       deadlineCheck = settings.deadlineCheck;
