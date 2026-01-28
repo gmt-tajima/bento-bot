@@ -204,18 +204,26 @@ client.on("messageReactionAdd", async (reaction, user) => {
 
     const emoji = reaction.emoji.name;
 
-    // ===============================
+       // ===============================
     // ★ 締切チェック（キャンセル以外）
     // ===============================
     if (emoji !== "❌") {
-     const settings = await loadDeadlineSettings();
-deadlineTime = settings.deadlineTime;
-deadlineCheck = settings.deadlineCheck;
+      const settings = await loadDeadlineSettings();
+      deadlineTime = settings.deadlineTime;
+      deadlineCheck = settings.deadlineCheck;
 
-if (deadlineCheck === "ON") {
-  if (isAfterDeadline()) {
+      if (deadlineCheck === "ON") {
+        if (isAfterDeadline()) {
           console.log("締切後のためリアクション拒否:", emoji);
+
+          // リアクション削除
           await reaction.users.remove(user.id).catch(() => {});
+
+          // 本人だけに通知（チャンネルを汚さない）
+          await user.send(
+            "⚠ 締切時間を過ぎているため注文できません。\n注文の変更は発注担当者にご連絡ください。"
+          ).catch(() => {});
+
           return;
         }
       }
