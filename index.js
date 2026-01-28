@@ -408,24 +408,23 @@ async function fetchTodayMessageFromChannel() {
       return;
     }
 
-    const today = getTodayDateString();
-    const [year, month, day] = today.split("/");
+    // ★ messageCreate と完全統一した日付キー生成
+    const d = new Date();
+    const yy = String(d.getFullYear()).slice(-2);
+    const MM = ("0" + (d.getMonth() + 1)).slice(-2);
+    const dd = ("0" + d.getDate()).slice(-2);
 
-    const key1 = `${parseInt(year)}年${parseInt(month)}月${parseInt(day)}日`;
-    const key2 = `${String(year).slice(-2)}年${month}${day}日`;
-    const key3 = `${parseInt(month)}月${parseInt(day)}日`;
+    const todayKey = `${yy}年${MM}月${dd}日`;
 
     const embed = latest.embeds[0];
     const title = embed?.title || "";
 
-    const isTodayPost =
-      title.includes(key1) ||
-      title.includes(key2) ||
-      title.includes(key3);
+    // ★ タイトルに今日の日付が含まれているか
+    const isTodayPost = title.includes(todayKey);
 
     if (!isTodayPost) {
       console.log(`今日の投稿ではありません（タイトル不一致） title="${title}"`);
-      console.log(`期待キー: ${key1} / ${key2} / ${key3}`);
+      console.log(`期待キー: ${todayKey}`);
       return;
     }
 
@@ -439,7 +438,7 @@ async function fetchTodayMessageFromChannel() {
     // Bot がリアクションを付ける
     await latest.react("🍱");
     await latest.react("🍚");
-   	await latest.react("❌");
+    await latest.react("❌");
 
   } catch (err) {
     console.error("fetchTodayMessageFromChannel エラー:", err);
