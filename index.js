@@ -271,7 +271,6 @@ client.on("messageReactionAdd", async (reaction, user) => {
   }
 });  
 
-
 // ===============================
 // ⑥ リアクション削除（キャンセル）
 // ===============================
@@ -284,9 +283,24 @@ client.on("messageReactionRemove", async (reaction, user) => {
       await reaction.message.fetch().catch(() => {});
     }
 
-    if (reaction.message.id !== todayMessageId) return;
-
     const emoji = reaction.emoji.name;
+
+    // ===============================
+    // ★ 過去投稿チェック（キャンセルも対象）
+    // ===============================
+    if (reaction.message.id !== todayMessageId) {
+      console.log("過去投稿へのリアクション削除を拒否:", emoji);
+
+      // 外されたリアクションを元に戻す
+      await reaction.message.react(emoji).catch(() => {});
+
+      // 本人にだけ通知
+      await user.send(
+        "⚠ 過去の投稿にはリアクションできません。注文は当日の投稿に対して行ってください。"
+      ).catch(() => {});
+
+      return;
+    }
 
     // ===============================
     // ★ 締切チェック（キャンセル以外）
@@ -305,6 +319,23 @@ client.on("messageReactionRemove", async (reaction, user) => {
         }
       }
     }
+
+    // ===============================
+    // ★ キャンセル処理（❌）
+    // ===============================
+    if (emoji === "❌") {
+      console.log("キャンセル処理開始:", user.username);
+
+      // ログから注文を削除
+      await removeReactionLog(user.id).catch(() => {});
+
+      console.log("キャンセル処理完了:", user.username);
+    }
+
+  } catch (err) {
+    console.error("messageReactionRemove エラー:", err);
+  }
+});
 
     // ===============================
     // ★ 通常の削除処理
