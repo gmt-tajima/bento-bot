@@ -337,26 +337,6 @@ client.on("messageReactionRemove", async (reaction, user) => {
   }
 });
 
-    // ===============================
-    // ★ 通常の削除処理
-    // ===============================
-    const current = reaction.message.reactions.cache;
-
-    const hasBento = current.get("🍱")?.users.cache.has(user.id);
-    const hasRice  = current.get("🍚")?.users.cache.has(user.id);
-
-    const isCancelEmoji = emoji === "❌";
-    const bothRemoved = !hasBento && !hasRice;
-
-    if (isCancelEmoji || bothRemoved) {
-      await handleReactionRemove(reaction, user);
-    }
-
-  } catch (err) {
-    console.error("messageReactionRemove エラー:", err);
-  }
-});
-
 // ===============================
 // Discord 接続状態ログ
 // ===============================
