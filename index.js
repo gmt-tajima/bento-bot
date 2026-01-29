@@ -255,28 +255,7 @@ client.on("messageReactionAdd", async (reaction, user) => {
     // ★ 過去投稿チェック（partial 解決後に実行）
     if (await rejectIfPastPost(reaction, user)) return;
 
-    // ★ 締切チェック（キャンセル以外）
-    if (emoji !== "❌") {
-      const settings = await loadDeadlineSettings();
-      deadlineTime = settings.deadlineTime;
-      deadlineCheck = settings.deadlineCheck;
-
-      if (deadlineCheck === "ON" && isAfterDeadline()) {
-        console.log("締切後のためリアクション拒否:", emoji);
-
-        await reaction.users.remove(user.id).catch(() => {});
-        await user.send(
-          "⚠ 締切時間を過ぎているため注文できません。\n注文の変更は発注担当者にご連絡ください。"
-        ).catch(() => {});
-
-        return;
-      }
-    }
-
-    // ★ おかず・ごはんの注文処理（締切チェック済み）
-    await handleReactionAdd(reaction, user);
-
-    // ★ キャンセル（❌）はここで処理
+    // ★ まず ❌ のキャンセル処理を最優先で実行
     if (emoji === "❌") {
       const member = await findMember(user.id);
       if (!member) return;
@@ -298,6 +277,25 @@ client.on("messageReactionAdd", async (reaction, user) => {
 
       return;
     }
+
+    // ★ ここから先は 🍱🍚 の注文処理
+    const settings = await loadDeadlineSettings();
+    deadlineTime = settings.deadlineTime;
+    deadlineCheck = settings.deadlineCheck;
+
+    if (deadlineCheck === "ON" && isAfterDeadline()) {
+      console.log("締切後のためリアクション拒否:", emoji);
+
+      await reaction.users.remove(user.id).catch(() => {});
+      await user.send(
+        "⚠ 締切時間を過ぎているため注文できません。\n注文の変更は発注担当者にご連絡ください。"
+      ).catch(() => {});
+
+      return;
+    }
+
+    // ★ おかず・ごはんの注文処理（締切チェック済み）
+    await handleReactionAdd(reaction, user);
 
   } catch (err) {
     console.error("messageReactionAdd エラー:", err);
