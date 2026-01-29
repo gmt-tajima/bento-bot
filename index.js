@@ -244,6 +244,7 @@ client.on("messageReactionAdd", async (reaction, user) => {
   try {
     if (user.bot) return;
 
+    // ★ partial を先に解決（最重要）
     if (reaction.partial || reaction.message.partial || !reaction.emoji?.name) {
       await reaction.fetch().catch(() => {});
       await reaction.message.fetch().catch(() => {});
@@ -251,7 +252,7 @@ client.on("messageReactionAdd", async (reaction, user) => {
 
     const emoji = reaction.emoji.name;
 
-    // ★ 過去投稿チェック（共通化）
+    // ★ 過去投稿チェック（partial 解決後に実行）
     if (await rejectIfPastPost(reaction, user)) return;
 
     // ★ 締切チェック（キャンセル以外）
@@ -310,6 +311,7 @@ client.on("messageReactionRemove", async (reaction, user) => {
   try {
     if (user.bot) return;
 
+    // ★ partial を先に解決（最重要）
     if (reaction.partial || reaction.message.partial || !reaction.emoji?.name) {
       await reaction.fetch().catch(() => {});
       await reaction.message.fetch().catch(() => {});
@@ -317,7 +319,7 @@ client.on("messageReactionRemove", async (reaction, user) => {
 
     const emoji = reaction.emoji.name;
 
-    // ★ 過去投稿チェック（共通化）
+    // ★ 過去投稿チェック（partial 解決後に実行）
     if (await rejectIfPastPost(reaction, user)) return;
 
     // ★ キャンセル処理（❌）
