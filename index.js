@@ -178,23 +178,21 @@ async function updateTodayMessage(message) {
 // ★ 過去投稿チェック（Add/Remove 共通）
 // ===============================
 async function rejectIfPastPost(reaction, user) {
-  if (reaction.message.id === todayMessageId) return false; // 当日 → OK
+  // 当日の投稿なら OK
+  if (reaction.message.id === todayMessageId) return false;
 
   const emoji = reaction.emoji.name;
   console.log("過去投稿へのリアクション拒否:", emoji);
 
-  // 外されたリアクションをユーザー本人として復活
-  await reaction.message.reactions.cache
-    .get(emoji)
-    ?.users.add(user.id)
-    .catch(() => {});
+  // ★ 過去投稿のリアクションは「外すだけ」
+  await reaction.users.remove(user.id).catch(() => {});
 
-  // 本人にだけ通知
+  // ★ DM 通知
   await user.send(
     "⚠ 過去の投稿にはリアクションできません。注文は当日の投稿に対して行ってください。"
   ).catch(() => {});
 
-  return true; // 過去投稿 → 拒否
+  return true;
 }
 
 // ===============================
