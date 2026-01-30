@@ -226,10 +226,15 @@ client.once("ready", async () => {
 // ===============================
 client.on("messageCreate", async (message) => {
   try {
-    if (message.author.bot) return;
+    // Bot 自身の投稿だけ無視（Webhook は許可）
+    if (message.author.id === client.user.id) return;
+
+    // チャンネルチェック
     if (message.channel.id !== process.env.CHANNEL_ID) return;
 
+    // 今日の投稿ならリアクション付与
     await updateTodayMessage(message);
+
   } catch (err) {
     console.error("messageCreate エラー:", err);
   }
@@ -351,6 +356,22 @@ client.on("messageReactionRemove", async (reaction, user) => {
     console.error("messageReactionRemove エラー:", err);
   }
 });
+
+// ===============================
+// ★ 定期監視（Webhook 投稿の取りこぼし防止）
+// ===============================
+setInterval(async () => {
+  try {
+    const channel = await client.channels.fetch(process.env.CHANNEL_ID);
+    const messages = await channel.messages.fetch({ limit: 5 });
+
+    for (const msg of messages.values()) {
+      if (await updateTodayMessage(msg)) break;
+    }
+  } catch (err) {
+    console.error("定期監視エラー:", err);
+  }
+}, 60 * 1000); // 1分ごとにチェック
 
 // ===============================
 // Discord 接続状態ログ
