@@ -232,6 +232,9 @@ client.on("messageCreate", async (message) => {
     // チャンネルチェック
     if (message.channel.id !== process.env.CHANNEL_ID) return;
 
+    // ★ 投稿直後の embed.title をログ出力
+    console.log("embed title (raw):", message.embeds[0]?.title);
+
     // 今日の投稿ならリアクション付与
     await updateTodayMessage(message);
 
