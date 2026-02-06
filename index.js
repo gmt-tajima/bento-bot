@@ -416,11 +416,12 @@ process.on("uncaughtException", (err) => {
 // =======================================================
 
 // ===============================
-// ★ 投稿IDをスプレッドシートに書き込む（完全版）
+// ★ 投稿IDをスプレッドシートに書き込む（静音化版）
 // ===============================
 async function writeTodayMessageIdToSheet(messageId) {
   try {
-    console.log("writeTodayMessageIdToSheet 開始:", messageId);
+    // 必要最低限のログだけ残す（開始ログも不要なら消してOK）
+    // console.log("writeTodayMessageIdToSheet 開始:", messageId);
 
     const auth = new google.auth.GoogleAuth({
       credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT),
@@ -432,8 +433,6 @@ async function writeTodayMessageIdToSheet(messageId) {
 
     const today = getTodayDateString();
 
-    console.log("投稿ログ取得開始");
-
     const postLog = await sheetsLocal.spreadsheets.values.get({
       spreadsheetId: process.env.SHEET_ID,
       range: "投稿ログ!A:C"
@@ -442,12 +441,10 @@ async function writeTodayMessageIdToSheet(messageId) {
     const rows = postLog.data.values || [];
     const alreadyExists = rows.some(row => row[0] === today && row[1] === messageId);
 
+    // ★★★ 静音化ポイント：スキップ時は何も言わず return ★★★
     if (alreadyExists) {
-      console.log("投稿IDは既に記録済みのため、書き込みをスキップします");
       return;
     }
-
-    console.log("投稿ログに書き込み準備:", today, messageId);
 
     await sheetsLocal.spreadsheets.values.append({
       spreadsheetId: process.env.SHEET_ID,
@@ -458,7 +455,8 @@ async function writeTodayMessageIdToSheet(messageId) {
       }
     });
 
-    console.log("投稿IDをスプレッドシートに書き込み完了:", messageId);
+    // これも静かにしたいなら消してOK
+    // console.log("投稿IDをスプレッドシートに書き込み完了:", messageId);
 
   } catch (err) {
     console.error("writeTodayMessageIdToSheet エラー:", err);
